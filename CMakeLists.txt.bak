@@ -1,0 +1,577 @@
+cmake_minimum_required(VERSION 3.16)
+project(desfact VERSION 0.1.0 LANGUAGES CXX C)
+
+# ╔═════════════════════════════════════════════════════════╗
+# ║  DescriptorFactory Build Options                        ║
+# ╠═════════════════════════════════════════════════════════╣
+# ║  -DCMAKE_BUILD_TYPE=[Debug|Release|RelWithDebInfo]      ║
+# ║    Controls basic optimization level                    ║
+# ║                                                         ║
+# ║  -DOPTIMIZE_FOR_NATIVE=[ON|OFF]                         ║
+# ║    ON: Optimize for current CPU with all features       ║
+# ║    OFF: Use conservative optimizations for portability  ║
+# ║                                                         ║
+# ║  -DOPTIMIZE_GRAPH_OPS=[ON|OFF]                          ║
+# ║    Enable optimizations for Boost Graph operations      ║
+# ║                                                         ║
+# ║  -DOPTIMIZE_RDKIT=[ON|OFF]                              ║
+# ║    Enable RDKit-specific optimizations                  ║
+# ║                                                         ║
+# ║  Profile-Guided Optimization (PGO):                     ║
+# ║  -DENABLE_PGO=ON -DGENERATE_PROFILE=ON                  ║
+# ║    First pass: Build and run typical workloads          ║
+# ║  -DENABLE_PGO=ON -DUSE_PROFILE=ON                       ║
+# ║    Second pass: Rebuild using generated profile         ║
+# ║                                                         ║
+# ║  -DWITH_CUDA=[ON|OFF]                                   ║
+# ║    Enable CUDA support for GPU acceleration             ║
+# ║                                                         ║
+# ║  Debugging Options:                                     ║
+# ║  -DENABLE_SANITIZER_ADDRESS=[ON|OFF]                    ║
+# ║  -DENABLE_SANITIZER_UNDEFINED=[ON|OFF]                  ║
+# ║  -DENABLE_SANITIZER_THREAD=[ON|OFF]                     ║
+# ╚═════════════════════════════════════════════════════════╝
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Optimization flags based on build type and CPU architecture
+include(CheckCXXCompilerFlag)
+
+# Default to Release build type if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+    message(STATUS "Setting build type to Release as none was specified")
+endif()
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# Option for performance-optimized build
+option(OPTIMIZE_FOR_NATIVE "Optimize for the current CPU architecture with all available features" ON)
+message(STATUS "Optimize for native CPU: ${OPTIMIZE_FOR_NATIVE}")
+
+# Option for profile-guided optimization
+option(ENABLE_PGO "Enable profile-guided optimization" OFF)
+option(GENERATE_PROFILE "Generate PGO profile (first pass)" OFF)
+option(USE_PROFILE "Use existing PGO profile (second pass)" OFF)
+message(STATUS "Profile-guided optimization: ${ENABLE_PGO}")
+message(STATUS "Generate profile: ${GENERATE_PROFILE}")
+message(STATUS "Use profile: ${USE_PROFILE}")
+
+# Option for additional specialized optimizations
+option(OPTIMIZE_GRAPH_OPS "Enable specialized optimizations for graph operations (Boost)" ON)
+message(STATUS "Optimize graph operations: ${OPTIMIZE_GRAPH_OPS}")
+
+# Option for RDKit-specific optimization
+option(OPTIMIZE_RDKIT "Enable RDKit-specific optimizations" ON)
+message(STATUS "Optimize for RDKit: ${OPTIMIZE_RDKIT}")
+
+# Sanitizer options for development/debugging
+option(ENABLE_SANITIZER_ADDRESS "Enable address sanitizer" OFF)
+option(ENABLE_SANITIZER_UNDEFINED "Enable undefined behavior sanitizer" OFF)
+option(ENABLE_SANITIZER_THREAD "Enable thread sanitizer" OFF)
+message(STATUS "Address sanitizer: ${ENABLE_SANITIZER_ADDRESS}")
+message(STATUS "UB sanitizer: ${ENABLE_SANITIZER_UNDEFINED}")
+message(STATUS "Thread sanitizer: ${ENABLE_SANITIZER_THREAD}")
+
+# Function to safely add flags if supported
+function(add_flag_if_supported flag var)
+    string(REGEX REPLACE "[^A-Za-z0-9]" "_" flag_name "${flag}")
+    check_cxx_compiler_flag("${flag}" "COMPILER_SUPPORTS${flag_name}")
+    if(COMPILER_SUPPORTS${flag_name})
+        set(${var} "${${var}} ${flag}" PARENT_SCOPE)
+        message(STATUS "Added compiler flag: ${flag}")
+    else()
+        message(STATUS "Compiler flag not supported: ${flag}")
+    endif()
+endfunction()
+
+# Base optimization flags
+set(BASE_CXX_FLAGS "")
+
+# Compiler-specific optimizations
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    # Base optimization flags for GCC/Clang
+    set(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -Wall -Wextra")
+    
+    # Optimization level based on build type
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        set(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -O3")
+        
+        # Add LTO for Release builds
+        add_flag_if_supported("-flto" BASE_CXX_FLAGS)
+        
+        # Fast math (provides significant performance boost for scientific calculations)
+        add_flag_if_supported("-ffast-math" BASE_CXX_FLAGS)
+        
+        # CPU feature detection for GCC/Clang
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|i686")
+            if(OPTIMIZE_FOR_NATIVE)
+                # Native architecture optimization (auto-detects all CPU features)
+                add_flag_if_supported("-march=native" BASE_CXX_FLAGS)
+            else()
+                # Add common but conservative CPU instruction sets
+                add_flag_if_supported("-msse2" BASE_CXX_FLAGS)
+                add_flag_if_supported("-msse3" BASE_CXX_FLAGS)
+            endif()
+            
+            # Try aggressive auto-vectorization
+            add_flag_if_supported("-ftree-vectorize" BASE_CXX_FLAGS)
+            
+            # Only add these optimizations if we're targeting the native architecture
+            if(OPTIMIZE_FOR_NATIVE)
+                add_flag_if_supported("-mavx" BASE_CXX_FLAGS)
+                add_flag_if_supported("-mavx2" BASE_CXX_FLAGS)
+                add_flag_if_supported("-mfma" BASE_CXX_FLAGS)
+                add_flag_if_supported("-msse4.2" BASE_CXX_FLAGS)
+            endif()
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64")
+            if(OPTIMIZE_FOR_NATIVE)
+                # ARM-specific optimizations
+                add_flag_if_supported("-march=native" BASE_CXX_FLAGS)
+            endif()
+            add_flag_if_supported("-mfpu=neon" BASE_CXX_FLAGS)
+        endif()
+        
+        # Memory optimizations
+        add_flag_if_supported("-fno-plt" BASE_CXX_FLAGS)
+        add_flag_if_supported("-fprefetch-loop-arrays" BASE_CXX_FLAGS)
+        
+        # Add profile-guided optimization flags if enabled
+        if(ENABLE_PGO)
+            if(GENERATE_PROFILE)
+                # First pass: generate profile data
+                add_flag_if_supported("-fprofile-generate" BASE_CXX_FLAGS)
+                add_flag_if_supported("-fprofile-generate" CMAKE_EXE_LINKER_FLAGS)
+                add_flag_if_supported("-fprofile-generate" CMAKE_SHARED_LINKER_FLAGS)
+                message(STATUS "Configured for profile generation (first PGO pass)")
+            elseif(USE_PROFILE)
+                # Second pass: use profile data for optimization
+                if(EXISTS "${CMAKE_SOURCE_DIR}/default.profdata" OR 
+                   EXISTS "${CMAKE_BINARY_DIR}/default.profdata" OR
+                   EXISTS "${CMAKE_SOURCE_DIR}/default.profraw")
+                    add_flag_if_supported("-fprofile-use" BASE_CXX_FLAGS)
+                    add_flag_if_supported("-fprofile-correction" BASE_CXX_FLAGS)
+                    message(STATUS "Using profile data for optimization (second PGO pass)")
+                else()
+                    message(WARNING "Profile data not found. Run with -DGENERATE_PROFILE=ON first.")
+                endif()
+            endif()
+        endif()
+        
+        # Boost Graph Library optimizations based on profiling
+        if(OPTIMIZE_GRAPH_OPS)
+            # GCC-specific optimization flags
+            add_flag_if_supported("-fno-tree-copyrename" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-tree-loop-vectorize" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-inline-small-functions" BASE_CXX_FLAGS)
+            add_flag_if_supported("-freorder-blocks-algorithm=stc" BASE_CXX_FLAGS)
+            
+            # Optimize hot functions from profiling
+            add_definitions(-DBOOST_DISABLE_ASSERTS)
+            add_definitions(-DNDEBUG) # Disable assertions in release mode
+            
+            # Add more inlining for frequently called small functions
+            add_flag_if_supported("-finline-functions" BASE_CXX_FLAGS)
+            add_flag_if_supported("-finline-limit=1000" BASE_CXX_FLAGS)
+            
+            # Cache locality improvements
+            add_flag_if_supported("-falign-functions=32" BASE_CXX_FLAGS)
+            
+            message(STATUS "Applied Boost Graph Library optimizations")
+        endif()
+        
+        # RDKit-specific optimizations based on profiling
+        if(OPTIMIZE_RDKIT)
+            # Based on profiling data showing RDKit::Atom::getIdx() as hotspot
+            add_definitions(-DRDKIT_OPTIMIZE_ATOM_ACCESS)
+            
+            # Memory allocator optimizations
+            add_flag_if_supported("-fno-omit-frame-pointer" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-builtin-malloc" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-builtin-calloc" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-builtin-realloc" BASE_CXX_FLAGS)
+            add_flag_if_supported("-fno-builtin-free" BASE_CXX_FLAGS)
+            
+            # Cache optimization for data structures
+            add_flag_if_supported("-falign-loops=32" BASE_CXX_FLAGS)
+            add_flag_if_supported("-falign-jumps=32" BASE_CXX_FLAGS)
+            
+            message(STATUS "Applied RDKit-specific optimizations")
+        endif()
+        
+        # Enable link-time optimization
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(BASE_CXX_FLAGS "${BASE_CXX_FLAGS} -O0 -g")
+    endif()
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    # Clang-specific optimization flags (more conservative)
+    if(OPTIMIZE_GRAPH_OPS)
+        add_flag_if_supported("-fno-vectorize" BASE_CXX_FLAGS)
+        add_flag_if_supported("-fno-slp-vectorize" BASE_CXX_FLAGS)
+    endif()
+endif()
+
+message(STATUS "Using optimization flags: ${BASE_CXX_FLAGS}")
+
+# Set the flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${BASE_CXX_FLAGS}")
+
+# Apply sanitizers if enabled
+if(ENABLE_SANITIZER_ADDRESS)
+    add_flag_if_supported("-fsanitize=address -fno-omit-frame-pointer" CMAKE_CXX_FLAGS)
+    add_flag_if_supported("-fsanitize=address -fno-omit-frame-pointer" CMAKE_EXE_LINKER_FLAGS)
+    add_flag_if_supported("-fsanitize=address -fno-omit-frame-pointer" CMAKE_SHARED_LINKER_FLAGS)
+endif()
+
+if(ENABLE_SANITIZER_UNDEFINED)
+    add_flag_if_supported("-fsanitize=undefined" CMAKE_CXX_FLAGS)
+    add_flag_if_supported("-fsanitize=undefined" CMAKE_EXE_LINKER_FLAGS)
+    add_flag_if_supported("-fsanitize=undefined" CMAKE_SHARED_LINKER_FLAGS)
+endif()
+
+if(ENABLE_SANITIZER_THREAD)
+    add_flag_if_supported("-fsanitize=thread" CMAKE_CXX_FLAGS)
+    add_flag_if_supported("-fsanitize=thread" CMAKE_EXE_LINKER_FLAGS)
+    add_flag_if_supported("-fsanitize=thread" CMAKE_SHARED_LINKER_FLAGS)
+endif()
+
+# TBB
+find_package(TBB QUIET)
+if(TBB_FOUND)
+    add_compile_definitions(WITH_TBB)
+    message(STATUS "Found TBB via find_package: ${TBB_VERSION}")
+else()
+    find_library(TBB_LIBRARY NAMES tbb)
+    find_path(TBB_INCLUDE_DIR NAMES tbb/tbb.h)
+    if(TBB_LIBRARY AND TBB_INCLUDE_DIR)
+        set(TBB_FOUND TRUE)
+        add_compile_definitions(WITH_TBB)
+        message(STATUS "Found TBB library manually: ${TBB_LIBRARY}")
+        include_directories(${TBB_INCLUDE_DIR})
+    else()
+        message(STATUS "TBB not found, will use std::async for parallelization")
+    endif()
+endif()
+
+# RPATH
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/usr/lib")
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
+# Find RDKit package
+find_package(RDKit REQUIRED)
+
+# Set RDKit paths directly since target properties are not available
+set(RDKIT_INCLUDE_DIR "/usr/include/rdkit/")
+set(RDKIT_LIBRARY_DIR "/lib/")
+
+# Add RDKit include directory
+include_directories(${RDKIT_INCLUDE_DIR})
+
+# Find RDKit libraries using find_library with proper paths
+find_library(RDKIT_GRAPHMOL_LIB
+    NAMES GraphMol RDKitGraphMol
+    PATHS ${RDKIT_LIBRARY_DIR}
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_SMILEPARSE_LIB
+    NAMES SmilesParse RDKitSmilesParse
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_FILEPARSERS_LIB
+    NAMES FileParsers RDKitFileParsers
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_CHEMTRANSFORMS_LIB
+    NAMES ChemTransforms RDKitChemTransforms
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_DESCRIPTORS_LIB
+    NAMES Descriptors RDKitDescriptors
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_RDGENERAL_LIB
+    NAMES RDGeneral RDKitRDGeneral
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_MOLSTANDARDIZE_LIB
+    NAMES MolStandardize RDKitMolStandardize
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_SUBSTRUCTMATCH_LIB
+    NAMES SubstructMatch RDKitSubstructMatch
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_RDGEOMETRYLIB_LIB
+    NAMES RDGeometryLib RDKitRDGeometryLib
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_DATASTRUCTS_LIB
+    NAMES DataStructs RDKitDataStructs
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_FINGERPRINTS_LIB
+    NAMES Fingerprints RDKitFingerprints
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+find_library(RDKIT_DEPICTOR_LIB
+    NAMES Depictor RDKitDepictor
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+# Add MolStandardize library explicitly
+find_library(RDKIT_MOLSTANDARDIZE_LIB
+    NAMES MolStandardize RDKitMolStandardize
+    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATH_SUFFIXES rdkit
+    NO_DEFAULT_PATH
+)
+
+
+# Verify all required libraries were found
+foreach(lib
+    RDKIT_GRAPHMOL_LIB RDKIT_SMILEPARSE_LIB RDKIT_FILEPARSERS_LIB
+    RDKIT_CHEMTRANSFORMS_LIB RDKIT_DESCRIPTORS_LIB RDKIT_RDGENERAL_LIB
+    RDKIT_MOLSTANDARDIZE_LIB RDKIT_SUBSTRUCTMATCH_LIB RDKIT_RDGEOMETRYLIB_LIB
+    RDKIT_DATASTRUCTS_LIB RDKIT_FINGERPRINTS_LIB RDKIT_DEPICTOR_LIB RDKIT_MOLSTANDARDIZE_LIB)
+    if(NOT ${lib})
+        message(FATAL_ERROR "Required RDKit library ${lib} not found")
+    endif()
+endforeach()
+
+list(APPEND CMAKE_INSTALL_RPATH "${RDKIT_LIBRARY_DIR}")
+
+
+# CUDA (Optional, kept for future potential use)
+option(WITH_CUDA "Build with CUDA support" OFF)
+if(WITH_CUDA)
+    enable_language(CUDA)
+    find_package(CUDA REQUIRED)
+    add_definitions(-DWITH_CUDA)
+    
+    # Detect CUDA architecture
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        # Auto-detect GPU architecture
+        execute_process(
+            COMMAND ${CMAKE_CUDA_COMPILER} --list-gpu-arch
+            OUTPUT_VARIABLE CUDA_ARCHITECTURES_AVAILABLE
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(CUDA_ARCHITECTURES_AVAILABLE)
+            # Extract the highest arch from the list
+            string(REPLACE "\n" ";" CUDA_ARCH_LIST "${CUDA_ARCHITECTURES_AVAILABLE}")
+            list(SORT CUDA_ARCH_LIST)
+            list(GET CUDA_ARCH_LIST -1 LATEST_ARCH)
+            string(REGEX REPLACE "sm_" "" LATEST_ARCH "${LATEST_ARCH}")
+            set(CMAKE_CUDA_ARCHITECTURES ${LATEST_ARCH})
+            message(STATUS "Auto-detected CUDA architecture: ${LATEST_ARCH}")
+        else()
+            # Fallback to a range of common architectures
+            set(CMAKE_CUDA_ARCHITECTURES 60 70 75 80 86)
+            message(STATUS "Using default CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+        endif()
+    endif()
+    
+    # Set optimized CUDA flags
+    set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -O3 --use_fast_math")
+    
+    # Add compiler-specific CUDA flags
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -fPIC")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xcompiler -fPIC")
+    endif()
+    
+    message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+    message(STATUS "CUDA flags: ${CUDA_NVCC_FLAGS}")
+endif()
+
+set(RDKIT_LIBRARIES
+    ${RDKIT_GRAPHMOL_LIB}
+    ${RDKIT_SMILEPARSE_LIB}
+    ${RDKIT_FILEPARSERS_LIB}
+    ${RDKIT_CHEMTRANSFORMS_LIB}
+    ${RDKIT_DESCRIPTORS_LIB}
+    ${RDKIT_RDGENERAL_LIB}
+    ${RDKIT_MOLSTANDARDIZE_LIB}
+    ${RDKIT_SUBSTRUCTMATCH_LIB}
+    ${RDKIT_RDGEOMETRYLIB_LIB}
+    ${RDKIT_DATASTRUCTS_LIB}
+    ${RDKIT_FINGERPRINTS_LIB}
+    ${RDKIT_DEPICTOR_LIB}
+    ${RDKIT_MOLSTANDARDIZE_LIB} # Ensure MolStandardize is linked
+)
+
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${RDKIT_INCLUDE_DIR}
+)
+
+link_directories(
+    ${RDKIT_LIBRARY_DIR}
+)
+
+# Add Eigen dependency with more robust finding mechanism
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+find_package(Eigen3 QUIET)
+
+if(NOT EIGEN3_FOUND)
+    # Try pkg-config as a fallback
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(EIGEN3 QUIET eigen3)
+        if(EIGEN3_FOUND)
+            set(EIGEN3_INCLUDE_DIR ${EIGEN3_INCLUDE_DIRS})
+            message(STATUS "Found Eigen3 via pkg-config: ${EIGEN3_INCLUDE_DIR}")
+        endif()
+    endif()
+endif()
+
+# Look in common installation directories if still not found
+if(NOT EIGEN3_FOUND)
+    find_path(EIGEN3_INCLUDE_DIR 
+        NAMES Eigen/Core Eigen/Dense
+        PATHS
+        /usr/include/eigen3
+        /usr/local/include/eigen3
+        /opt/local/include/eigen3
+        /usr/include
+        /usr/local/include
+        /opt/local/include
+    )
+    if(EIGEN3_INCLUDE_DIR)
+        set(EIGEN3_FOUND TRUE)
+        message(STATUS "Found Eigen3 in: ${EIGEN3_INCLUDE_DIR}")
+    endif()
+endif()
+
+# Final check and inclusion
+if(NOT EIGEN3_FOUND)
+    message(FATAL_ERROR "Eigen3 not found. Please install Eigen3 library.")
+else()
+    include_directories(${EIGEN3_INCLUDE_DIR})
+    message(STATUS "Eigen3 include directory: ${EIGEN3_INCLUDE_DIR}")
+endif()
+
+# Updated source list (without duplicates)
+set(SOURCES
+    src/utils.cpp
+    src/io.cpp
+    src/descriptors.cpp
+    src/descriptors/fractional.cpp
+    src/descriptors/sum.cpp
+    src/descriptors/strings.cpp
+    src/descriptors/vague3.cpp
+    src/descriptors/vague4.cpp
+    src/descriptors/vague5.cpp
+    src/descriptors/electronic.cpp
+    src/descriptors/eigen.cpp
+    src/descriptors/vague6.cpp
+    src/descriptors/vague7.cpp
+    src/descriptors/selfies.cpp
+)
+
+# Check if vague3.cpp exists and include it
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/descriptors/vague3.cpp")
+    list(APPEND SOURCES src/descriptors/vague3.cpp)
+else()
+    message(WARNING "vague3.cpp not found - some descriptors may be undefined")
+    add_definitions(-DNO_VAGUE3_DESCRIPTORS)
+endif()
+
+# Check if vague4.cpp exists and include it
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/descriptors/vague4.cpp")
+    list(APPEND SOURCES src/descriptors/vague4.cpp)
+else()
+    message(WARNING "vague4.cpp not found - some descriptors may be undefined")
+    add_definitions(-DNO_VAGUE4_DESCRIPTORS)
+endif()
+
+# Check if electronic.cpp exists and include it
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/descriptors/electronic.cpp")
+    list(APPEND SOURCES src/descriptors/electronic.cpp)
+else()
+    message(WARNING "electronic.cpp not found - some descriptors may be undefined")
+    add_definitions(-DNO_ELECTRONIC_DESCRIPTORS)
+endif()
+
+if(WITH_CUDA)
+    set(CUDA_SOURCES src/cuda/descriptors_cuda.cu)
+    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -O3 -arch=sm_60)
+endif()
+
+add_library(desfact SHARED ${SOURCES} ${CUDA_SOURCES})
+target_link_libraries(desfact
+    ${RDKIT_LIBRARIES}
+)
+
+if(WITH_CUDA)
+    target_link_libraries(desfact ${CUDA_LIBRARIES})
+endif()
+
+if(TBB_FOUND)
+    if(TARGET TBB::tbb)
+        target_link_libraries(desfact TBB::tbb)
+    else()
+        target_link_libraries(desfact ${TBB_LIBRARY})
+    endif()
+endif()
+
+# Main executable
+add_executable(desfact_main src/main.cpp)
+set_target_properties(desfact_main PROPERTIES
+    OUTPUT_NAME "desfact" # Keep executable name as 'desfact'
+    BUILD_WITH_INSTALL_RPATH FALSE
+    SKIP_BUILD_RPATH FALSE
+    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/usr/lib:${RDKIT_LIBRARY_DIR}"
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+target_link_libraries(desfact_main
+    desfact
+    ${RDKIT_LIBRARIES}
+)
+
+if(TBB_FOUND)
+    if(TARGET TBB::tbb)
+        target_link_libraries(desfact_main TBB::tbb)
+    else()
+        target_link_libraries(desfact_main ${TBB_LIBRARY})
+    endif()
+endif()
+
+# Removed csvtool target assuming main.cpp covers its functionality
+
+install(TARGETS desfact desfact_main
+        RUNTIME DESTINATION bin
+        LIBRARY DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include/desfact)
+
+# Ensure RDKit libraries are found even if not in standard paths
+list(APPEND CMAKE_PREFIX_PATH "/usr/local")
