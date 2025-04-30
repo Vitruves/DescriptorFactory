@@ -1,22 +1,39 @@
 cmake_minimum_required(VERSION 3.16)
 project(desfact VERSION 0.1.0 LANGUAGES CXX C)
 
-
-# PGO Configuration - now optional
-option(ENABLE_PGO "Enable Profile-Guided Optimization" OFF)
-if(ENABLE_PGO AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-generate=.")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-generate=.")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fprofile-generate=.")
-    message(STATUS "PGO: Enabled profile generation with -fprofile-generate=.")
-else()
-    message(STATUS "PGO: Disabled")
-endif()
-
-
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Suppress common warnings specific to macOS
+if(APPLE)
+    # Disable warnings about deprecated operator"" _smiles style (from RDKit headers)
+    add_compile_options(-Wno-deprecated-literal-operator)
+    
+    # Disable warnings about unused lambda captures
+    add_compile_options(-Wno-unused-lambda-capture)
+    
+    # Disable warnings about deprecated RDKit functions
+    add_compile_options(-Wno-deprecated-declarations)
+    
+    # Disable warnings about unused variables and functions
+    add_compile_options(-Wno-unused-variable -Wno-unused-function -Wno-unused-parameter)
+    
+    # Disable warnings about sign comparisons
+    add_compile_options(-Wno-sign-compare)
+    
+    # Disable warnings about logical operator parentheses
+    add_compile_options(-Wno-logical-op-parentheses)
+    
+    # Disable warnings about infinity behavior
+    add_compile_options(-Wno-nan-infinity-disabled)
+    
+    # Disable warnings about reordering
+    add_compile_options(-Wno-reorder-ctor)
+    
+    # Suppress additional specific field/variable warnings
+    add_compile_options(-Wno-unused-private-field -Wno-unused-but-set-variable)
+endif()
 
 # --- Option to build GUI ---
 option(BUILD_GUI "Build the desfact-gui executable" ON)
@@ -31,6 +48,15 @@ if(BUILD_GUI)
     # Find Qt (Try Qt6 first, fallback to Qt5) - Make required only if building GUI
     find_package(Qt6 COMPONENTS Widgets QUIET)
     if(NOT Qt6_FOUND)
+        # Check common Homebrew Qt5 paths on macOS
+        if(EXISTS "/opt/homebrew/opt/qt@5")
+            set(Qt5_DIR "/opt/homebrew/opt/qt@5/lib/cmake/Qt5")
+            list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/qt@5")
+        elseif(EXISTS "/usr/local/opt/qt@5")
+            set(Qt5_DIR "/usr/local/opt/qt@5/lib/cmake/Qt5")
+            list(APPEND CMAKE_PREFIX_PATH "/usr/local/opt/qt@5")
+        endif()
+        
         find_package(Qt5 COMPONENTS Widgets REQUIRED) # REQUIRED only if BUILD_GUI
         set(QT_VERSION 5)
         set(QT_WIDGETS_LIB Qt5::Widgets)
@@ -48,8 +74,10 @@ if(TBB_FOUND)
     add_compile_definitions(WITH_TBB)
     message(STATUS "Found TBB via find_package: ${TBB_VERSION}")
 else()
-    find_library(TBB_LIBRARY NAMES tbb)
-    find_path(TBB_INCLUDE_DIR NAMES tbb/tbb.h)
+    find_library(TBB_LIBRARY NAMES tbb
+        PATHS /usr/local/opt/tbb/lib /opt/homebrew/opt/tbb/lib)
+    find_path(TBB_INCLUDE_DIR NAMES tbb/tbb.h
+        PATHS /usr/local/opt/tbb/include /opt/homebrew/opt/tbb/include)
     if(TBB_LIBRARY AND TBB_INCLUDE_DIR)
         set(TBB_FOUND TRUE)
         add_compile_definitions(WITH_TBB)
@@ -63,15 +91,26 @@ endif()
 # RPATH
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/usr/lib")
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/opt/homebrew/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Find RDKit package
-find_package(RDKit REQUIRED)
+find_package(RDKit QUIET)
 
-# Set RDKit paths directly since target properties are not available
-set(RDKIT_INCLUDE_DIR "/usr/include/rdkit/")
-set(RDKIT_LIBRARY_DIR "/lib/")
+# Set RDKit paths for macOS Homebrew installations
+if(APPLE)
+    # Check both Intel and Apple Silicon Homebrew paths
+    if(EXISTS "/opt/homebrew/opt/rdkit")
+        # Apple Silicon path
+        set(RDKIT_PREFIX "/opt/homebrew/opt/rdkit")
+    elseif(EXISTS "/usr/local/opt/rdkit")
+        # Intel path
+        set(RDKIT_PREFIX "/usr/local/opt/rdkit")
+    endif()
+    
+    set(RDKIT_INCLUDE_DIR "${RDKIT_PREFIX}/include/rdkit")
+    set(RDKIT_LIBRARY_DIR "${RDKIT_PREFIX}/lib")
+endif()
 
 # Add RDKit include directory
 include_directories(${RDKIT_INCLUDE_DIR})
@@ -81,89 +120,91 @@ find_library(RDKIT_GRAPHMOL_LIB
     NAMES GraphMol RDKitGraphMol
     PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_SMILEPARSE_LIB
     NAMES SmilesParse RDKitSmilesParse
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_FILEPARSERS_LIB
     NAMES FileParsers RDKitFileParsers
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_CHEMTRANSFORMS_LIB
     NAMES ChemTransforms RDKitChemTransforms
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_DESCRIPTORS_LIB
     NAMES Descriptors RDKitDescriptors
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_RDGENERAL_LIB
     NAMES RDGeneral RDKitRDGeneral
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_MOLSTANDARDIZE_LIB
     NAMES MolStandardize RDKitMolStandardize
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_SUBSTRUCTMATCH_LIB
     NAMES SubstructMatch RDKitSubstructMatch
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_RDGEOMETRYLIB_LIB
     NAMES RDGeometryLib RDKitRDGeometryLib
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_DATASTRUCTS_LIB
     NAMES DataStructs RDKitDataStructs
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_FINGERPRINTS_LIB
     NAMES Fingerprints RDKitFingerprints
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 find_library(RDKIT_DEPICTOR_LIB
     NAMES Depictor RDKitDepictor
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
+
 # Add MolStandardize library explicitly
 find_library(RDKIT_MOLSTANDARDIZE_LIB
     NAMES MolStandardize RDKitMolStandardize
-    PATHS ${RDKIT_LIBRARY_DIR} /lib/ /usr/local/lib
+    PATHS ${RDKIT_LIBRARY_DIR}
     PATH_SUFFIXES rdkit
-    NO_DEFAULT_PATH
 )
 
+# Add ChemicalFeatures library explicitly for Gasteiger charges
+find_library(RDKIT_CHEMFEATURES_LIB
+    NAMES ChemicalFeatures RDKitChemicalFeatures
+    PATHS ${RDKIT_LIBRARY_DIR}
+    PATH_SUFFIXES rdkit
+)
+
+# Add PartialCharges library for Gasteiger charges
+find_library(RDKIT_PARTIALCHARGES_LIB
+    NAMES PartialCharges RDKitPartialCharges
+    PATHS ${RDKIT_LIBRARY_DIR}
+    PATH_SUFFIXES rdkit
+)
 
 # Verify all required libraries were found
 foreach(lib
     RDKIT_GRAPHMOL_LIB RDKIT_SMILEPARSE_LIB RDKIT_FILEPARSERS_LIB
     RDKIT_CHEMTRANSFORMS_LIB RDKIT_DESCRIPTORS_LIB RDKIT_RDGENERAL_LIB
     RDKIT_MOLSTANDARDIZE_LIB RDKIT_SUBSTRUCTMATCH_LIB RDKIT_RDGEOMETRYLIB_LIB
-    RDKIT_DATASTRUCTS_LIB RDKIT_FINGERPRINTS_LIB RDKIT_DEPICTOR_LIB RDKIT_MOLSTANDARDIZE_LIB)
+    RDKIT_DATASTRUCTS_LIB RDKIT_FINGERPRINTS_LIB RDKIT_DEPICTOR_LIB
+    RDKIT_CHEMFEATURES_LIB RDKIT_PARTIALCHARGES_LIB)
     if(NOT ${lib})
         message(FATAL_ERROR "Required RDKit library ${lib} not found")
     endif()
@@ -191,12 +232,10 @@ if(NOT EIGEN3_FOUND)
     find_path(EIGEN3_INCLUDE_DIR
         NAMES Eigen/Core Eigen/Dense
         PATHS
-        /usr/include/eigen3
+        /opt/homebrew/include/eigen3
         /usr/local/include/eigen3
-        /opt/local/include/eigen3
-        /usr/include
+        /opt/homebrew/include
         /usr/local/include
-        /opt/local/include
     )
     if(EIGEN3_INCLUDE_DIR)
         set(EIGEN3_FOUND TRUE)
@@ -233,7 +272,8 @@ set(RDKIT_LIBRARIES
     ${RDKIT_DATASTRUCTS_LIB}
     ${RDKIT_FINGERPRINTS_LIB}
     ${RDKIT_DEPICTOR_LIB}
-    ${RDKIT_MOLSTANDARDIZE_LIB} # Ensure MolStandardize is linked
+    ${RDKIT_CHEMFEATURES_LIB}
+    ${RDKIT_PARTIALCHARGES_LIB}
 )
 
 include_directories(
@@ -262,10 +302,6 @@ set(LIB_SOURCES
     src/descriptors/vague7.cpp
     src/descriptors/selfies.cpp
     src/descriptors/pka.cpp
-    src/descriptors/vague8.cpp
-    src/descriptors/morgan.cpp
-    src/descriptors/eigen.cpp
-    src/descriptors/solubility.cpp
 )
 
 if(WITH_CUDA)
@@ -298,7 +334,7 @@ set_target_properties(desfact_main PROPERTIES
     OUTPUT_NAME "desfact" # Keep executable name as 'desfact'
     BUILD_WITH_INSTALL_RPATH FALSE
     SKIP_BUILD_RPATH FALSE
-    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/usr/lib:${RDKIT_LIBRARY_DIR}"
+    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/opt/homebrew/lib:${RDKIT_LIBRARY_DIR}"
     INSTALL_RPATH_USE_LINK_PATH TRUE
 )
 target_link_libraries(desfact_main
@@ -323,12 +359,12 @@ if(BUILD_GUI)
         src/gui/mainwindow.h  # Explicitly include the header
     )
 
-    add_executable(desfact_gui WIN32 MACOSX_BUNDLE ${GUI_SOURCES})
+    add_executable(desfact_gui MACOSX_BUNDLE ${GUI_SOURCES})
     set_target_properties(desfact_gui PROPERTIES
         OUTPUT_NAME "desfact-gui"
         BUILD_WITH_INSTALL_RPATH FALSE
         SKIP_BUILD_RPATH FALSE
-        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/usr/lib:${RDKIT_LIBRARY_DIR}"
+        INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib:/usr/local/lib:/opt/homebrew/lib:${RDKIT_LIBRARY_DIR}"
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
     target_link_libraries(desfact_gui
@@ -349,9 +385,6 @@ else()
 endif() # End BUILD_GUI block
 # -----------------------------------------
 
-
-# Removed csvtool target assuming main.cpp covers its functionality
-
 # Install targets - make GUI installation conditional
 install(TARGETS desfact desfact_main
         RUNTIME DESTINATION bin
@@ -360,10 +393,31 @@ install(TARGETS desfact desfact_main
 if(BUILD_GUI)
     install(TARGETS desfact_gui
             RUNTIME DESTINATION bin
+            BUNDLE DESTINATION Applications
             LIBRARY DESTINATION lib)
 endif()
 
 install(DIRECTORY include/ DESTINATION include/desfact)
 
 # Ensure RDKit libraries are found even if not in standard paths
-list(APPEND CMAKE_PREFIX_PATH "/usr/local")
+list(APPEND CMAKE_PREFIX_PATH "/usr/local" "/opt/homebrew")
+
+# Add optimization flags for Apple Silicon
+if(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+        # Optimization flags for Apple Silicon (M1/M2/M3)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mcpu=apple-m1 -O3")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mcpu=apple-m1 -O3")
+        
+        # Enable specific NEON/SIMD optimizations
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math -ffp-contract=fast")
+        
+        # Enable link time optimization
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -flto=thin")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -flto=thin")
+        set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -flto=thin")
+        set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flto=thin")
+        
+        message(STATUS "Applied Apple Silicon optimization flags")
+    endif()
+endif()

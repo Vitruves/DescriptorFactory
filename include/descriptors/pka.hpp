@@ -4,22 +4,75 @@
 #include "descriptors.hpp"
 #include <GraphMol/GraphMol.h>
 #include <GraphMol/Atom.h>
+#include <GraphMol/SmilesParse/SmartsWrite.h> // Include necessary headers
+#include <GraphMol/SmilesParse/SmilesParse.h>
 #include <string>
 #include <variant>
+#include <vector>          // Needed for RandomForestModel
 #include <unordered_map>
+#include <memory> // For unique_ptr
 
 // Forward declare RDKit types
 namespace RDKit {
     class ROMol;
+    class RWMol; // Needed for SmartsToMol potentially
 }
 
 namespace desfact {
 namespace descriptors {
 
+// Moved definitions from pka.cpp
+struct TreeNode {
+    int feature;
+    float threshold;
+    int left_child;
+    int right_child;
+    float value;
+};
+
+struct RandomForestModel {
+    int n_estimators;
+    int n_features;
+    std::vector<std::vector<TreeNode>> trees;
+    std::unordered_map<std::string, int> vocabulary;
+    std::vector<float> idf;
+    int analyzer_type; // 0=char, 1=word
+    int ngram_min;
+    int ngram_max;
+    
+    // Keep predict definition here if simple, or move implementation to cpp
+    float predict(const std::vector<float>& features) const {
+        float sum = 0.0f;
+        for (const auto& tree : trees) {
+            int node_id = 0;
+            while (true) {
+                const TreeNode& node = tree[node_id];
+                if (node.left_child == -1) { // Leaf node
+                    sum += node.value;
+                    break;
+                }
+                // Ensure features access is safe
+                if (node.feature >= 0 && static_cast<size_t>(node.feature) < features.size()) {
+                     if (features[node.feature] <= node.threshold) {
+                         node_id = node.left_child;
+                     } else {
+                         node_id = node.right_child;
+                     }
+                } else {
+                    // Handle error: invalid feature index
+                    // For simplicity, let's break (consider logging/throwing)
+                     // globalLogger.error("Invalid feature index in RF predict: " + std::to_string(node.feature));
+                     break;
+                }
+            }
+        }
+        return (n_estimators > 0) ? (sum / n_estimators) : 0.0f; // Avoid division by zero
+    }
+};
+
 // Common utility functions for PKA descriptors
 namespace pka_utils {
-    std::string classifyMolecule(const Molecule& mol);
-    double predictPKAFromModel(const Molecule& mol, const std::string& modelPath);
+    // Removed placeholder declarations, implementations are within PkaDescriptor or anonymous namespace
 }
 
 // Base class for pKa related descriptors (optional, but can group helpers)
@@ -29,19 +82,33 @@ protected:
     static std::string classifyMoleculeType(const RDKit::ROMol& mol);
     static double estimateAcidPKa(const RDKit::ROMol& mol);
     static double estimateBasePKa(const RDKit::ROMol& mol);
-    
+
     // Cache for SMARTS patterns (potentially static thread_local in cpp)
+    // Use unique_ptr for automatic memory management
     struct PatternCache {
          std::unordered_map<std::string, std::unique_ptr<RDKit::ROMol>> patterns;
-         ~PatternCache(); // Destructor to clean up ROMol pointers
-         RDKit::ROMol* getPattern(const std::string& smarts);
+         // ~PatternCache(); // Destructor no longer needed with unique_ptr
+         RDKit::ROMol* getPattern(const std::string& smarts); // Return raw pointer, cache owns it
     };
+    // Make cache thread_local for thread safety
     static thread_local PatternCache s_patternCache;
 
+    // Cache for ML models
+    class ModelCache {
+    public:
+        const RandomForestModel* getModel(const std::string& modelPath);
+        void clear() { models.clear(); }
+    private:
+        std::unordered_map<std::string, std::unique_ptr<RandomForestModel>> models;
+    };
+    static thread_local ModelCache s_modelCache;
 
 public:
     PkaDescriptor(const std::string& name, const std::string& description);
-    virtual ~PkaDescriptor() = default;
+    ~PkaDescriptor() override = default; // Ensure virtual destructor
+
+    // Static method to clear thread-local caches
+    static void clearThreadLocalCaches();
 };
 
 // Descriptor for acidic pKa

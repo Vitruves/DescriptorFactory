@@ -1,6 +1,7 @@
 #include "descriptors.hpp"
 #include "descriptors/fractional.hpp"
 #include "descriptors/sum.hpp"
+#include "descriptors/eigen.hpp"
 #include "descriptors/vague3.hpp"
 #include "descriptors/strings.hpp"
 #include "descriptors/vague4.hpp"
@@ -8,8 +9,11 @@
 #include "descriptors/vague5.hpp"
 #include "descriptors/vague6.hpp"
 #include "descriptors/vague7.hpp"
+#include "descriptors/morgan.hpp"
 #include "descriptors/selfies.hpp"
 #include "descriptors/pka.hpp"
+#include "descriptors/vague8.hpp"
+#include "descriptors/solubility.hpp"
 #include <GraphMol/Descriptors/MolDescriptors.h>
 #include <GraphMol/GraphMol.h>
 #include <GraphMol/MolOps.h>
@@ -556,8 +560,106 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::AvgNeighborChargeRadiusPerDegreeDescriptor>());
     registerDescriptor(std::make_unique<descriptors::KierShapeIndexVariant3Descriptor>());
 
-    // Register Eigen-based descriptors (Omitted as per request)
-    // ...
+    // Register Eigen-based descriptors
+    registerDescriptor(std::make_unique<descriptors::AdjacencyNonZeroEntries>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyMatrixTrace>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyFrobeniusNorm>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencySpectralRadius>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencySmallestEigenvalue>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencySumEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencySumSquaresEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyEigenvalueVariance>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyEigenvalueSkewness>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyEigenvalueKurtosis>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyPositiveEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyNegativeEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyZeroEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyMaxDegree>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyMinDegree>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyMeanDegree>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyDegreeVariance>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyDegreeStdDev>());
+    registerDescriptor(std::make_unique<descriptors::AdjacencyMatrixRank>());
+    registerDescriptor(std::make_unique<descriptors::GraphEnergy>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianSpectralRadius>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianAlgebraicConnectivity>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianZeroEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianEnergy>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianMatrixTrace>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianMatrixDeterminant>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianTotalEffectiveResistance>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianKirchhoffIndex>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianEigenvalueVariance>());
+    registerDescriptor(std::make_unique<descriptors::LaplacianEigenvalueSkewness>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedLaplacianSpectralRadius>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedLaplacianSmallestNonzero>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedLaplacianLargestEigenvalue>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedLaplacianEnergy>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedLaplacianTrace>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixMaxDegree>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixMinDegree>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixAvgDegree>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixVariance>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixSkewness>());
+    registerDescriptor(std::make_unique<descriptors::DegreeMatrixEntropy>());
+    registerDescriptor(std::make_unique<descriptors::NumberOf2Walks>());
+    registerDescriptor(std::make_unique<descriptors::NumberOf3Walks>());
+    registerDescriptor(std::make_unique<descriptors::NumberOf4Walks>());
+    registerDescriptor(std::make_unique<descriptors::MeanClosed3WalksPerNode>());
+    registerDescriptor(std::make_unique<descriptors::MeanClosed4WalksPerNode>());
+    registerDescriptor(std::make_unique<descriptors::Walk2Energy>());
+    registerDescriptor(std::make_unique<descriptors::Walk3Energy>());
+    registerDescriptor(std::make_unique<descriptors::Walk4Energy>());
+    registerDescriptor(std::make_unique<descriptors::GraphIrregularityWalkCount>());
+    registerDescriptor(std::make_unique<descriptors::TrianglesToPathsRatio>());
+    registerDescriptor(std::make_unique<descriptors::MaxSingularValue>());
+    registerDescriptor(std::make_unique<descriptors::MinNonZeroSingularValue>());
+    registerDescriptor(std::make_unique<descriptors::ConditionNumber>());
+    registerDescriptor(std::make_unique<descriptors::SumSingularValues>());
+    registerDescriptor(std::make_unique<descriptors::FrobeniusNormSingularValues>());
+    registerDescriptor(std::make_unique<descriptors::SingularValueEntropy>());
+    registerDescriptor(std::make_unique<descriptors::SingularValueVariance>());
+    registerDescriptor(std::make_unique<descriptors::SingularValueSkewness>());
+    registerDescriptor(std::make_unique<descriptors::SpectralEffectiveRank>());
+    registerDescriptor(std::make_unique<descriptors::NuclearNorm>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedEigenvalueGap>());
+    registerDescriptor(std::make_unique<descriptors::SumNormalizedEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::VarianceNormalizedEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::CountNormalizedEigenvaluesAboveHalf>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedEnergy>());
+    registerDescriptor(std::make_unique<descriptors::LargestNormalizedEigenvectorCentrality>());
+    registerDescriptor(std::make_unique<descriptors::AverageNormalizedEigenvectorCentrality>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedAdjacencyMatrixRank>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedAdjacencyEntropy>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianSpectralRadius>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianSmallestEigenvalue>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianEnergy>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianTrace>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianDeterminant>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianZeroEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianPositiveEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianNegativeEigenvalues>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianEigenvalueVariance>());
+    registerDescriptor(std::make_unique<descriptors::SignlessLaplacianEigenvalueSkewness>());
+    registerDescriptor(std::make_unique<descriptors::WeightedAdjacencySpectralRadius>());
+    registerDescriptor(std::make_unique<descriptors::MeanFirstPassageTime>());
+    registerDescriptor(std::make_unique<descriptors::CommuteTimeDistance>());
+    registerDescriptor(std::make_unique<descriptors::KirchhoffIndexVariance>());
+    registerDescriptor(std::make_unique<descriptors::EffectiveGraphResistanceDistribution>());
+    registerDescriptor(std::make_unique<descriptors::LocalClusteringCoefficientDistribution>());
+    registerDescriptor(std::make_unique<descriptors::GraphRobustnessIndex>());
+    registerDescriptor(std::make_unique<descriptors::NormalizedEstradaIndex>());
+    registerDescriptor(std::make_unique<descriptors::GraphBipartivityIndex>());
+    registerDescriptor(std::make_unique<descriptors::SpanningTreeEntropy>());
+    registerDescriptor(std::make_unique<descriptors::GraphIrregularity>());
+    registerDescriptor(std::make_unique<descriptors::WienerIndex>());
+    registerDescriptor(std::make_unique<descriptors::EstradaIndex>());
+    registerDescriptor(std::make_unique<descriptors::NumberSpanningTrees>());
+    registerDescriptor(std::make_unique<descriptors::GraphEccentricity>());
+    registerDescriptor(std::make_unique<descriptors::SpectralGap>());
+    registerDescriptor(std::make_unique<descriptors::TraceMatrixPower2>());
+    registerDescriptor(std::make_unique<descriptors::NumberTriangles>());
+    registerDescriptor(std::make_unique<descriptors::GraphDiameter>());
 
     // Enhanced Statistical Features
     registerDescriptor(std::make_unique<descriptors::ChainLengthDescriptor>());
@@ -704,7 +806,7 @@ DescriptorFactory::DescriptorFactory() {
     // registerDescriptor(std::make_unique<descriptors::PolarizabilityRatio>());
     // registerDescriptor(std::make_unique<descriptors::RingAtomToNonRingAtomRatio>());
     //registerDescriptor(std::make_unique<descriptors::RingSizeDistributionVariance>());
-    // registerDescriptor(std::make_unique<descriptors::RingBondFraction>());
+    // registerDescrip(std::make_unique<descriptors::RingBondFraction>());
     // registerDescriptor(std::make_unique<descriptors::RingFusionDensity>()); // Removed duplicate registration
     //registerDescriptor(std::make_unique<descriptors::AtomElectronegativityImbalance>());
     //registerDescriptor(std::make_unique<descriptors::ConnectivityAsymmetryIndex>());
@@ -718,8 +820,6 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::AromaticNonAromaticBondCount>());
     registerDescriptor(std::make_unique<descriptors::RingAtomChargeVariance>());
 
-    // Register Vague 8 descriptors -- Placeholder, no actual V8 file yet
-    // ... (existing commented out code) ...
 
     // *** Register New pKa Descriptors ***
     registerDescriptor(std::make_unique<descriptors::AcidityTypeDescriptor>());
@@ -729,6 +829,70 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::IsBaseDescriptor>());
     registerDescriptor(std::make_unique<descriptors::IsNeutralDescriptor>());
     registerDescriptor(std::make_unique<descriptors::IsZwitterionDescriptor>());
+
+    // Register Morgan Descriptors
+    registerDescriptor(std::make_unique<descriptors::MorganBitDensityRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentUniquenessScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganRadiusInformationRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitClusteringCoefficientDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFrequentFragmentEntropyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFingerprintAsymmetryIndexDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitTransitionRateDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentSizeDistributionSkewnessDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganLongestCommonSubstructureScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganPharmacophorePatternDensityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentDiversityScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitCorrelationCoefficientDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganPatternRecurrenceFrequencyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitSimilarityToReferenceSetDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentComplexityScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganInformationContentDensityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganEnvironmentVariabilityIndexDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitPositionImportanceScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganRingSystemRepresentationScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitProbabilityDistributionEntropyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentElectronegativitySpectrumDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitPositionCorrelationMatrixDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentConnectivityPatternDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitOccurrenceFrequencySkewnessDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganSubstructureHeterogeneityIndexDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitPolarityDistributionDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFragmentSimilarityNetworkDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganBitPositionInformationGainDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganSubstructureDiversityGradientDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MorganFingerprintSymmetryScoreDescriptor>());
+
+    // *** Register Vague8 Descriptors ***
+    registerDescriptor(std::make_unique<descriptors::TopologicalChargeDistributionSkewnessDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ElementNeighborhoodDiversityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondOrderAlternationPatternDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AvgShortestPathBetweenDiffFuncGroupsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AvgHeteroClusterSizeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::EntropyOfRingSubstCountDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::EntropyOfFuncGroupDistancesDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ChainBranchingPatternDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ElectronegativeAtomNeighborhoodScoreDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::TopologicalChargeSeparationIndexDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RingSystemConnectivityPatternDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::HeteroatomPositionEntropyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondOrderTransitionFrequencyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomNeighborhoodElectronegativityGradientDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ChainLengthDistributionEntropyDescriptor>());
+    // registerDescriptor(std::make_unique<descriptors::RingSubstitutionSymmetryDescriptor>()); // Temporarily comment out
+    registerDescriptor(std::make_unique<descriptors::HeteroatomSequencePatternsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FunctionalGroupIsolationTopologyDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::HydrophobicPatchConnectivityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondTopologicalEnvironmentFingerprintDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ChiralCenterTopologicalDistributionDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RingFusionPatternCodeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ElectronegativityTopologicalMomentDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomicRadiiVarianceInNeighborhoodsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::HeteroatomBondingPatternCodeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::SubstructureFrequencySpectrumDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FormalChargeNeighborhoodPatternDescriptor>());
+
+    // Register Solubility Descriptor
+    registerDescriptor(std::make_unique<desfact::descriptors::SolubilityDescriptor>());
 
     globalLogger.info("Initialized descriptor factory with " +
                      std::to_string(descriptors.size()) + " descriptors");

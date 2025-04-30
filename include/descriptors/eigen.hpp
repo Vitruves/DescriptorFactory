@@ -8,6 +8,10 @@
 #include <variant>
 #include <string>
 #include <cmath>
+#include <chrono> // For cache access time
+#include <unordered_map> // For caches
+#include <vector> // For sorting cache entries
+#include <algorithm> // For std::sort, std::min
 
 namespace desfact {
 namespace descriptors {
@@ -15,27 +19,30 @@ namespace descriptors {
 // Base class for Eigen-based descriptors
 class EigenDescriptor : public Descriptor {
 protected:
-    // Cache management constants
-    static constexpr size_t MAX_CACHE_ENTRIES = 1000;  // Maximum number of entries in each cache
-    static constexpr size_t CACHE_CLEANUP_THRESHOLD = 800;  // When to trigger cleanup
-    
-    // Thread-local caches for matrices and eigenvalues
+    // --- Caching Structures ---
+    // Maximum cache size constants
+    static constexpr size_t MAX_CACHE_ENTRIES = 500;  // Adjusted max entries per cache
+    static constexpr size_t CACHE_CLEANUP_THRESHOLD = 400; // Trigger cleanup earlier
+
+    // Base cache entry struct
     struct CacheEntry {
         std::chrono::steady_clock::time_point lastAccess;
-        size_t approximateSize;  // Rough estimate of memory usage in bytes
+        // size_t approximateSize = 0; // Memory tracking removed for simplicity/performance
     };
-    
-    // Matrix caches with pointer as key (molecule-specific)
+
+    // Matrix cache entry: Stores the computed matrix
     struct MatrixCacheEntry : CacheEntry {
         Eigen::MatrixXd matrix;
     };
-    
-    // Eigenvalue cache with matrix hash as key
+
+    // Eigenvalue cache entry: Stores computed eigenvalues
     struct EigenvalueCacheEntry : CacheEntry {
         Eigen::VectorXd eigenvalues;
     };
-    
-    // Thread-local caches
+
+    // --- Thread-Local Caches ---
+    // Use thread_local for thread safety without explicit locking for reads/writes *within* a thread.
+    // Keyed by the const RDKit::ROMol pointer (assumes molecule object lifetime exceeds cache usage within a thread's task)
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjacencyCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> degreeCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> laplacianCache;
@@ -43,264 +50,236 @@ protected:
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> signlessLaplacianCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> weightedAdjacencyCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> distanceMatrixCache;
-    
-    // Hash function for matrices (for eigenvalue cache)
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedAdjCache; // Added cache
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedLapCache; // Added cache
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> normalizedAdjCache; // Added cache
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow2Cache; // Added cache for A^2
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow3Cache; // Added cache for A^3
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow4Cache; // Added cache for A^4
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> lapPow2Cache; // Added cache for L^2
+
+    // --- Eigenvalue Cache ---
+    // Hash function for Eigen matrices (simple version based on size and corner values)
     struct MatrixHash {
-        std::size_t operator()(const Eigen::MatrixXd& matrix) const {
-            // Simple hash based on matrix dimensions and a sample of values
-            std::size_t seed = matrix.rows() * 73 + matrix.cols();
-            // Sample a few values from the matrix for the hash
-            for (int i = 0; i < std::min(3, (int)matrix.rows()); ++i) {
-                for (int j = 0; j < std::min(3, (int)matrix.cols()); ++j) {
-                    seed ^= std::hash<double>{}(matrix(i,j)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-                }
+        std::size_t operator()(const Eigen::MatrixXd& matrix) const noexcept {
+            std::size_t seed = 0;
+            // Combine hash of rows and cols
+            std::hash<Eigen::Index> indexHasher;
+            seed ^= indexHasher(matrix.rows()) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            seed ^= indexHasher(matrix.cols()) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+
+            // Combine hash of a few corner/center elements for content check
+            std::hash<double> doubleHasher;
+            int rows = matrix.rows();
+            int cols = matrix.cols();
+            if (rows > 0 && cols > 0) {
+                 seed ^= doubleHasher(matrix(0, 0)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                 if (rows > 1 && cols > 1)
+                    seed ^= doubleHasher(matrix(rows-1, cols-1)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                 if (rows > 2 && cols > 2)
+                     seed ^= doubleHasher(matrix(rows/2, cols/2)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
             }
             return seed;
         }
     };
-    
+
+    // Equality check for Eigen matrices (needed for hash map)
     struct MatrixEqual {
-        bool operator()(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) const {
+        bool operator()(const Eigen::MatrixXd& a, const Eigen::MatrixXd& b) const noexcept {
+            // Check dimensions first
             if (a.rows() != b.rows() || a.cols() != b.cols()) return false;
-            // Check a sample of values for equality
-            for (int i = 0; i < std::min(5, (int)a.rows()); ++i) {
-                for (int j = 0; j < std::min(5, (int)a.cols()); ++j) {
-                    if (std::abs(a(i,j) - b(i,j)) > 1e-10) return false;
-                }
-            }
-            return true;
+            // Use Eigen's built-in approximate comparison
+            return a.isApprox(b, 1e-9); // Tolerance for floating point comparison
         }
     };
-    
-    // Eigenvalue cache with matrix hash
+    // Cache for eigenvalues, keyed by the matrix itself using the custom hash and equality functors
     static thread_local std::unordered_map<Eigen::MatrixXd, EigenvalueCacheEntry, MatrixHash, MatrixEqual> eigenvalueCache;
-    
-    // Cache management functions
+    // Cache for singular values
+    static thread_local std::unordered_map<Eigen::MatrixXd, EigenvalueCacheEntry, MatrixHash, MatrixEqual> singularValueCache; // Using EigenvalueCacheEntry as structure is same
+    // Cache for dominant eigenvectors
+    static thread_local std::unordered_map<Eigen::MatrixXd, EigenvalueCacheEntry, MatrixHash, MatrixEqual> dominantEigenvectorCache; // Use EigenvalueCacheEntry for VectorXd
+
+
+    // --- Cache Management ---
     template<typename CacheType>
     static void cleanupCache(CacheType& cache, size_t keepEntries) {
         if (cache.size() <= keepEntries) return;
-        
-        // Sort entries by last access time
+
+        // Create a vector of pairs: <key, lastAccessTime>
         std::vector<std::pair<typename CacheType::key_type, std::chrono::steady_clock::time_point>> entries;
         entries.reserve(cache.size());
-        
-        for (const auto& entry : cache) {
-            entries.emplace_back(entry.first, entry.second.lastAccess);
+        for (const auto& pair : cache) {
+            entries.emplace_back(pair.first, pair.second.lastAccess);
         }
-        
+
         // Sort by access time (oldest first)
-        std::sort(entries.begin(), entries.end(), 
-            [](const auto& a, const auto& b) { return a.second < b.second; });
-        
-        // Remove oldest entries
+        std::sort(entries.begin(), entries.end(),
+                  [](const auto& a, const auto& b) { return a.second < b.second; });
+
+        // Remove the oldest entries until the cache size is reduced to 'keepEntries'
         size_t removeCount = cache.size() - keepEntries;
         for (size_t i = 0; i < removeCount; ++i) {
             cache.erase(entries[i].first);
         }
     }
-    
-    // Check all caches and clean up if needed
+
+    // Call cleanup on all caches if any exceed threshold
     static void checkAndCleanupCaches() {
-        if (adjacencyCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(adjacencyCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (degreeCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(degreeCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (laplacianCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(laplacianCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (normalizedLaplacianCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(normalizedLaplacianCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (signlessLaplacianCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(signlessLaplacianCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (weightedAdjacencyCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(weightedAdjacencyCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (distanceMatrixCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(distanceMatrixCache, MAX_CACHE_ENTRIES / 2);
-        }
-        if (eigenvalueCache.size() > CACHE_CLEANUP_THRESHOLD) {
-            cleanupCache(eigenvalueCache, MAX_CACHE_ENTRIES / 2);
-        }
+        // Check matrix caches
+        if (adjacencyCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(adjacencyCache, MAX_CACHE_ENTRIES / 2);
+        if (degreeCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(degreeCache, MAX_CACHE_ENTRIES / 2);
+        if (laplacianCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(laplacianCache, MAX_CACHE_ENTRIES / 2);
+        if (normalizedLaplacianCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(normalizedLaplacianCache, MAX_CACHE_ENTRIES / 2);
+        if (signlessLaplacianCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(signlessLaplacianCache, MAX_CACHE_ENTRIES / 2);
+        if (weightedAdjacencyCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(weightedAdjacencyCache, MAX_CACHE_ENTRIES / 2);
+        if (distanceMatrixCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(distanceMatrixCache, MAX_CACHE_ENTRIES / 2);
+        if (atomicNumWeightedAdjCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(atomicNumWeightedAdjCache, MAX_CACHE_ENTRIES / 2);
+        if (atomicNumWeightedLapCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(atomicNumWeightedLapCache, MAX_CACHE_ENTRIES / 2);
+        if (normalizedAdjCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(normalizedAdjCache, MAX_CACHE_ENTRIES / 2);
+        if (adjPow2Cache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(adjPow2Cache, MAX_CACHE_ENTRIES / 2);
+        if (adjPow3Cache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(adjPow3Cache, MAX_CACHE_ENTRIES / 2);
+        if (adjPow4Cache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(adjPow4Cache, MAX_CACHE_ENTRIES / 2);
+        if (lapPow2Cache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(lapPow2Cache, MAX_CACHE_ENTRIES / 2);
+
+
+        // Check vector caches
+        if (eigenvalueCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(eigenvalueCache, MAX_CACHE_ENTRIES / 2);
+        if (singularValueCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(singularValueCache, MAX_CACHE_ENTRIES / 2);
+        if (dominantEigenvectorCache.size() > CACHE_CLEANUP_THRESHOLD) cleanupCache(dominantEigenvectorCache, MAX_CACHE_ENTRIES / 2);
     }
-    
-    // Get cached or build adjacency matrix
-    Eigen::MatrixXd getAdjacencyMatrix(const RDKit::ROMol* mol) const {
-        auto it = adjacencyCache.find(mol);
-        if (it != adjacencyCache.end()) {
-            // Update last access time
+
+    // --- Cached Getters ---
+    // Template for getting matrix from cache or building it
+    template<typename CacheMap, typename BuildFunc>
+    const Eigen::MatrixXd& getOrBuildMatrix(const RDKit::ROMol* mol, CacheMap& cache, BuildFunc builder) const {
+        auto it = cache.find(mol);
+        if (it != cache.end()) {
             it->second.lastAccess = std::chrono::steady_clock::now();
             return it->second.matrix;
         }
-        
-        // Build the matrix
-        Eigen::MatrixXd adj = buildAdjacencyMatrix(mol);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = adj.rows() * adj.cols() * sizeof(double);
-        adjacencyCache[mol] = {std::chrono::steady_clock::now(), approxSize, adj};
-        
-        return adj;
+
+        checkAndCleanupCaches(); // Check before building potentially large matrix
+        Eigen::MatrixXd matrix = builder(mol);
+        cache[mol] = {std::chrono::steady_clock::now(), std::move(matrix)}; // Use move
+        return cache[mol].matrix; // Return the cached copy
     }
-    
-    // Get cached or build degree matrix
-    Eigen::MatrixXd getDegreeMatrix(const RDKit::ROMol* mol) const {
-        auto it = degreeCache.find(mol);
-        if (it != degreeCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
+
+    // Template for getting vector (Eigenvalues, SingularValues, Eigenvectors) from cache or computing
+    template<typename CacheMap, typename ComputeFunc>
+    const Eigen::VectorXd& getOrComputeVector(const Eigen::MatrixXd& matrix, CacheMap& cache, ComputeFunc computer) const {
+         auto it = cache.find(matrix);
+         if (it != cache.end()) {
+             it->second.lastAccess = std::chrono::steady_clock::now();
+             return it->second.eigenvalues; // Reuse EigenvalueCacheEntry struct
+         }
+
+         checkAndCleanupCaches();
+         Eigen::VectorXd vec = computer(matrix);
+         // Use MatrixXd as key for EigenvalueCache
+         cache[matrix] = {std::chrono::steady_clock::now(), std::move(vec)}; // Use move
+         return cache[matrix].eigenvalues; // Return cached copy
+    }
+
+    // Specific getters using the templates
+    const Eigen::MatrixXd& getAdjacencyMatrix(const RDKit::ROMol* mol) const {
+        return getOrBuildMatrix(mol, adjacencyCache, [this](const RDKit::ROMol* m){ return buildAdjacencyMatrix(m); });
+    }
+    const Eigen::MatrixXd& getDegreeMatrix(const RDKit::ROMol* mol) const {
+        return getOrBuildMatrix(mol, degreeCache, [this](const RDKit::ROMol* m){
+            Eigen::MatrixXd adj = getAdjacencyMatrix(m); // Get potentially cached adj matrix
+            return buildDegreeMatrix(adj);
+        });
+    }
+     const Eigen::MatrixXd& getLaplacianMatrix(const RDKit::ROMol* mol) const {
+         return getOrBuildMatrix(mol, laplacianCache, [this](const RDKit::ROMol* m){
+             Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+             Eigen::MatrixXd deg = getDegreeMatrix(m); // Uses cache internally
+             return buildLaplacianMatrix(deg, adj);
+         });
+     }
+     const Eigen::MatrixXd& getNormalizedLaplacianMatrix(const RDKit::ROMol* mol) const {
+         return getOrBuildMatrix(mol, normalizedLaplacianCache, [this](const RDKit::ROMol* m){
+             Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+             Eigen::MatrixXd deg = getDegreeMatrix(m);
+             return buildNormalizedLaplacian(deg, adj);
+         });
+     }
+     const Eigen::MatrixXd& getSignlessLaplacianMatrix(const RDKit::ROMol* mol) const {
+          return getOrBuildMatrix(mol, signlessLaplacianCache, [this](const RDKit::ROMol* m){
+              Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+              Eigen::MatrixXd deg = getDegreeMatrix(m);
+              return buildSignlessLaplacian(deg, adj);
+          });
+      }
+     const Eigen::MatrixXd& getWeightedAdjacencyMatrix(const RDKit::ROMol* mol) const {
+          return getOrBuildMatrix(mol, weightedAdjacencyCache, [this](const RDKit::ROMol* m){
+              return buildWeightedAdjacency(m);
+          });
+      }
+     const Eigen::MatrixXd& getDistanceMatrix(const RDKit::ROMol* mol) const {
+          return getOrBuildMatrix(mol, distanceMatrixCache, [this](const RDKit::ROMol* m){
+              return buildDistanceMatrix(m);
+          });
+      }
+     const Eigen::MatrixXd& getAtomicNumberWeightedAdjacency(const RDKit::ROMol* mol) const {
+          return getOrBuildMatrix(mol, atomicNumWeightedAdjCache, [this](const RDKit::ROMol* m){
+              return buildAtomicNumberWeightedAdjacency(m);
+          });
+      }
+      const Eigen::MatrixXd& getAtomicNumberWeightedLaplacian(const RDKit::ROMol* mol) const {
+          return getOrBuildMatrix(mol, atomicNumWeightedLapCache, [this](const RDKit::ROMol* m){
+              return buildAtomicNumberWeightedLaplacian(m);
+          });
+      }
+      const Eigen::MatrixXd& getNormalizedAdjacency(const RDKit::ROMol* mol) const {
+           return getOrBuildMatrix(mol, normalizedAdjCache, [this](const RDKit::ROMol* m){
+               Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+               Eigen::MatrixXd deg = getDegreeMatrix(m);
+               return buildNormalizedAdjacency(deg, adj);
+           });
+       }
+       const Eigen::MatrixXd& getAdjPow2(const RDKit::ROMol* mol) const {
+            return getOrBuildMatrix(mol, adjPow2Cache, [this](const RDKit::ROMol* m){
+                Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+                return adj * adj;
+            });
         }
-        
-        // Get adjacency matrix (possibly from cache)
-        Eigen::MatrixXd adj = getAdjacencyMatrix(mol);
-        Eigen::MatrixXd degree = buildDegreeMatrix(adj);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = degree.rows() * degree.cols() * sizeof(double);
-        degreeCache[mol] = {std::chrono::steady_clock::now(), approxSize, degree};
-        
-        return degree;
-    }
-    
-    // Get cached or build Laplacian matrix
-    Eigen::MatrixXd getLaplacianMatrix(const RDKit::ROMol* mol) const {
-        auto it = laplacianCache.find(mol);
-        if (it != laplacianCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
-        }
-        
-        // Get adjacency and degree matrices (possibly from cache)
-        Eigen::MatrixXd adj = getAdjacencyMatrix(mol);
-        Eigen::MatrixXd degree = getDegreeMatrix(mol);
-        Eigen::MatrixXd laplacian = buildLaplacianMatrix(degree, adj);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = laplacian.rows() * laplacian.cols() * sizeof(double);
-        laplacianCache[mol] = {std::chrono::steady_clock::now(), approxSize, laplacian};
-        
-        return laplacian;
-    }
-    
-    // Get cached or build normalized Laplacian matrix
-    Eigen::MatrixXd getNormalizedLaplacianMatrix(const RDKit::ROMol* mol) const {
-        auto it = normalizedLaplacianCache.find(mol);
-        if (it != normalizedLaplacianCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
-        }
-        
-        // Get adjacency and degree matrices (possibly from cache)
-        Eigen::MatrixXd adj = getAdjacencyMatrix(mol);
-        Eigen::MatrixXd degree = getDegreeMatrix(mol);
-        Eigen::MatrixXd normalizedLaplacian = buildNormalizedLaplacian(degree, adj);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = normalizedLaplacian.rows() * normalizedLaplacian.cols() * sizeof(double);
-        normalizedLaplacianCache[mol] = {std::chrono::steady_clock::now(), approxSize, normalizedLaplacian};
-        
-        return normalizedLaplacian;
-    }
-    
-    // Get cached or build signless Laplacian matrix
-    Eigen::MatrixXd getSignlessLaplacianMatrix(const RDKit::ROMol* mol) const {
-        auto it = signlessLaplacianCache.find(mol);
-        if (it != signlessLaplacianCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
-        }
-        
-        // Get adjacency and degree matrices (possibly from cache)
-        Eigen::MatrixXd adj = getAdjacencyMatrix(mol);
-        Eigen::MatrixXd degree = getDegreeMatrix(mol);
-        Eigen::MatrixXd signlessLaplacian = buildSignlessLaplacian(degree, adj);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = signlessLaplacian.rows() * signlessLaplacian.cols() * sizeof(double);
-        signlessLaplacianCache[mol] = {std::chrono::steady_clock::now(), approxSize, signlessLaplacian};
-        
-        return signlessLaplacian;
-    }
-    
-    // Get cached or build weighted adjacency matrix
-    Eigen::MatrixXd getWeightedAdjacencyMatrix(const RDKit::ROMol* mol) const {
-        auto it = weightedAdjacencyCache.find(mol);
-        if (it != weightedAdjacencyCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
-        }
-        
-        Eigen::MatrixXd weightedAdj = buildWeightedAdjacency(mol);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = weightedAdj.rows() * weightedAdj.cols() * sizeof(double);
-        weightedAdjacencyCache[mol] = {std::chrono::steady_clock::now(), approxSize, weightedAdj};
-        
-        return weightedAdj;
-    }
-    
-    // Get cached or build distance matrix
-    Eigen::MatrixXd getDistanceMatrix(const RDKit::ROMol* mol) const {
-        auto it = distanceMatrixCache.find(mol);
-        if (it != distanceMatrixCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
-        }
-        
-        Eigen::MatrixXd distMatrix = buildDistanceMatrix(mol);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = distMatrix.rows() * distMatrix.cols() * sizeof(double);
-        distanceMatrixCache[mol] = {std::chrono::steady_clock::now(), approxSize, distMatrix};
-        
-        return distMatrix;
-    }
-    
+        const Eigen::MatrixXd& getAdjPow3(const RDKit::ROMol* mol) const {
+             return getOrBuildMatrix(mol, adjPow3Cache, [this](const RDKit::ROMol* m){
+                 Eigen::MatrixXd adj2 = getAdjPow2(m); // Use cached A^2
+                 Eigen::MatrixXd adj = getAdjacencyMatrix(m);
+                 return adj2 * adj;
+             });
+         }
+        const Eigen::MatrixXd& getAdjPow4(const RDKit::ROMol* mol) const {
+             return getOrBuildMatrix(mol, adjPow4Cache, [this](const RDKit::ROMol* m){
+                 Eigen::MatrixXd adj2 = getAdjPow2(m); // Use cached A^2
+                 return adj2 * adj2;
+             });
+         }
+        const Eigen::MatrixXd& getLapPow2(const RDKit::ROMol* mol) const {
+             return getOrBuildMatrix(mol, lapPow2Cache, [this](const RDKit::ROMol* m){
+                 Eigen::MatrixXd lap = getLaplacianMatrix(m); // Use cached L
+                 return lap * lap;
+             });
+         }
+
+
     // Get cached or compute eigenvalues
-    Eigen::VectorXd getEigenvalues(const Eigen::MatrixXd& matrix) const {
-        auto it = eigenvalueCache.find(matrix);
-        if (it != eigenvalueCache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.eigenvalues;
-        }
-        
-        Eigen::VectorXd evals = computeEigenvalues(matrix);
-        
-        // Check and clean caches if needed
-        checkAndCleanupCaches();
-        
-        // Cache the result
-        size_t approxSize = evals.size() * sizeof(double);
-        eigenvalueCache[matrix] = {std::chrono::steady_clock::now(), approxSize, evals};
-        
-        return evals;
+    const Eigen::VectorXd& getEigenvalues(const Eigen::MatrixXd& matrix) const {
+        return getOrComputeVector(matrix, eigenvalueCache, [this](const Eigen::MatrixXd& m){ return computeEigenvalues(m); });
     }
-    
-    // Original matrix building methods (now used by the caching layer)
+    // Get cached or compute singular values
+    const Eigen::VectorXd& getSingularValues(const Eigen::MatrixXd& matrix) const {
+        return getOrComputeVector(matrix, singularValueCache, [this](const Eigen::MatrixXd& m){ return computeSingularValues(m); });
+    }
+     // Get cached or compute dominant eigenvector
+    const Eigen::VectorXd& getDominantEigenvector(const Eigen::MatrixXd& matrix) const {
+        return getOrComputeVector(matrix, dominantEigenvectorCache, [this](const Eigen::MatrixXd& m){ return computeDominantEigenvector(m); });
+    }
+
+
+    // --- Original Matrix Building Methods (now called by caching layer if needed) ---
     Eigen::MatrixXd buildAdjacencyMatrix(const RDKit::ROMol* mol) const;
     Eigen::MatrixXd buildDegreeMatrix(const Eigen::MatrixXd& adjacency) const;
     Eigen::MatrixXd buildLaplacianMatrix(const Eigen::MatrixXd& degree, const Eigen::MatrixXd& adjacency) const;
@@ -311,27 +290,28 @@ protected:
     Eigen::MatrixXd buildAtomicNumberWeightedAdjacency(const RDKit::ROMol* mol) const;
     Eigen::MatrixXd buildAtomicNumberWeightedLaplacian(const RDKit::ROMol* mol) const;
     Eigen::MatrixXd buildNormalizedAdjacency(const Eigen::MatrixXd& degree, const Eigen::MatrixXd& adjacency) const;
-    
-    // Compute eigenvalues (now used by the caching layer)
+
+    // --- Compute Eigenvalues/vectors/SVD (now called by caching layer if needed) ---
     Eigen::VectorXd computeEigenvalues(const Eigen::MatrixXd& matrix) const;
     Eigen::VectorXd computeSingularValues(const Eigen::MatrixXd& matrix) const;
-    
-    // Statistical helpers
+    Eigen::VectorXd computeDominantEigenvector(const Eigen::MatrixXd& matrix) const; // Renamed from getDominantEigenvector
+
+
+    // --- Statistical Helpers ---
     double computeVariance(const Eigen::VectorXd& values) const;
     double computeSkewness(const Eigen::VectorXd& values) const;
     double computeKurtosis(const Eigen::VectorXd& values) const;
-    double computeEntropy(const Eigen::VectorXd& values) const;
-    
-    // Get dominant eigenvector
-    Eigen::VectorXd getDominantEigenvector(const Eigen::MatrixXd& matrix) const;
-    
+    double computeEntropy(const Eigen::VectorXd& values) const; // Add definition in .cpp if used
+
 public:
     EigenDescriptor(const std::string& name, const std::string& description);
-    
-    // Static method to clear all caches (call on program exit or SIGINT)
-    static void clearAllCaches();
+    ~EigenDescriptor() override = default; // Ensure virtual destructor
+
+    // Static method to clear all thread-local caches (e.g., call at end of thread execution)
+    static void clearThreadLocalCaches();
 };
 
+// --- Descriptor Classes (Inherit from EigenDescriptor) ---
 // Adjacency matrix descriptors
 class AdjacencyNonZeroEntries : public EigenDescriptor {
 public:
@@ -594,12 +574,6 @@ public:
     WienerIndex();
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
-
-// class EstradaIndex : public EigenDescriptor {
-// public:
-//     EstradaIndex();
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// }; // Commented out due to zero or near-zero variance
 
 class EstradaIndex : public EigenDescriptor {
 public:
@@ -881,12 +855,6 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// class SignlessLaplacianEigenvalueSkewness : public EigenDescriptor {
-// public:
-//     SignlessLaplacianEigenvalueSkewness();
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// }; // Commented out due to zero or near-zero variance
-
 class SignlessLaplacianEigenvalueSkewness : public EigenDescriptor {
 public:
     SignlessLaplacianEigenvalueSkewness();
@@ -1031,10 +999,6 @@ class LapPow2Trace : public EigenDescriptor {
 public: LapPow2Trace(); std::variant<double, int, std::string> calculate(const Molecule& mol) const override; };
 
 // Matrix Exponential based (Estrada Index for other matrices)
-// class LapEstradaIdx : public EigenDescriptor {
-// public: LapEstradaIdx(); std::variant<double, int, std::string> calculate(const Molecule& mol) const override; }; // Commented out due to zero or near-zero variance
-// class SignLapEstradaIdx : public EigenDescriptor {
-// public: SignLapEstradaIdx(); std::variant<double, int, std::string> calculate(const Molecule& mol) const override; }; // Commented out due to zero or near-zero variance
 class DistMatEstradaIdx : public EigenDescriptor {
 public: DistMatEstradaIdx(); std::variant<double, int, std::string> calculate(const Molecule& mol) const override; };
 class WtNumAdjEstradaIdx : public EigenDescriptor {

@@ -16,6 +16,7 @@
 #include <unistd.h>    // For STDOUT_FILENO
 #include "utils.hpp"
 #include "io.hpp"
+#include <regex> // Required for potential future coloring
 
 
 #ifdef WITH_TBB
@@ -34,12 +35,22 @@
 
 using namespace desfact;
 
+// Helper function to add color to option group titles
+std::string colorizeHelp(const std::string& helpText) {
+    // Basic coloring example: Make group titles bold cyan
+    // This is a simple approach; more sophisticated coloring might require
+    // parsing the help string more carefully.
+    std::regex groupRegex("^[A-Za-z /]+:$", std::regex_constants::multiline);
+    std::string coloredHelp = std::regex_replace(helpText, groupRegex, "\033[1;36m$&\033[0m");
+    return coloredHelp;
+}
+
 void printVersion() {
     std::cout << "\033[1;36mDescriptorFactory\033[0m (\033[1mdesfact\033[0m) v0.1.0" << std::endl;
 }
 
 void printHelp(const cxxopts::Options& options) {
-    std::cout << options.help() << std::endl;
+    std::cout << colorizeHelp(options.help()) << std::endl;
 }
 
 // Add a simple file format checker
@@ -222,36 +233,39 @@ struct BatchWithResults {
 
 int main(int argc, char* argv[]) {
     // Parse command line arguments
-    cxxopts::Options options("\033[1;36mdesfact\033[0m", "Chemical descriptor calculator for molecular structures");
+    cxxopts::Options options("\033[1;36mdesfact\033[0m", 
+                           "\033[1;37mChemical descriptor calculator for molecular structures\033[0m");
     
-    // Organize options into groups
-    options.add_options("Basic")
-        ("h,help", "Display help information")
-        ("v,version", "Display version information")
-        ("l,list", "List available descriptors");
-    
-    options.add_options("Input/Output")
+    // Organize options into groups with most important first
+    options.add_options("Input")
         ("i,input", "Input CSV file path", cxxopts::value<std::string>())
         ("o,output", "Output CSV file path", cxxopts::value<std::string>())
+        ("s,smiles", "Direct SMILES string input (alternative to input file)", cxxopts::value<std::string>())
         ("d,descriptors", "Comma-separated list of descriptors to calculate, or 'all'", cxxopts::value<std::string>());
     
-    options.add_options("CSV Options")
-        ("s,smiles-column", "Name of the column containing SMILES", cxxopts::value<std::string>()->default_value("SMILES"))
+    options.add_options("CSV")
+        ("sc,smiles-col", "Name/index of the column containing SMILES", cxxopts::value<std::string>()->default_value("SMILES"))
         ("delimiter", "CSV delimiter character", cxxopts::value<std::string>()->default_value(","))
         ("no-header", "Input CSV file has no header")
         ("escapechar", "CSV escape character (disables standard \"\" quoting)", cxxopts::value<std::string>()->default_value("\\"));
     
     options.add_options("Performance")
         ("b,batch-size", "Number of molecules to process per batch", cxxopts::value<size_t>())
-        ("t,threads", "Number of parallel threads (0=auto)", cxxopts::value<int>())
+        ("j,jobs", "Number of parallel jobs (0=auto)", cxxopts::value<int>())
         ("no-stream", "Process molecules in batches instead of streaming (increases memory usage)")
         ("verbose", "Enable detailed logging output");
+        
+    options.add_options("General")
+        ("h,help", "Display help information")
+        ("v,version", "Display version information")
+        ("l,list", "List available descriptors");
     
     // Set positional help
     options.positional_help("\033[1m<input file>\033[0m \033[1m<output file>\033[0m");
     
-    // Customize the help formatting
-    options.set_width(100);
+    // Adjust width for potentially better alignment. Increase if needed.
+    options.set_width(120); 
+    options.custom_help("[OPTION...]"); // Add standard usage indicator
     
     // Fast help/version display
     if (argc == 1 || (argc > 1 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0))) {
@@ -271,26 +285,26 @@ int main(int argc, char* argv[]) {
         if (result.count("version")) { printVersion(); return 0; }
 
         // Configure global settings
-        globalConfig.numThreads = result.count("threads") ? result["threads"].as<int>() : 0; // Default 0 for auto-detect later
+        globalConfig.numThreads = result.count("jobs") ? result["jobs"].as<int>() : 0;
         globalConfig.verbose = result.count("verbose") > 0;
-        globalConfig.batchSize = result.count("batch-size") ? result["batch-size"].as<size_t>() : 64; // Default 64
+        globalConfig.batchSize = result.count("batch-size") ? result["batch-size"].as<size_t>() : 64;
         
         // Set default minimal level based on verbose flag
         if (globalConfig.verbose) {
             globalLogger.setMinLevel(LogLevel::DEBUG);
             globalLogger.info("Verbose mode enabled.");
-            globalLogger.info("Using " + std::to_string(globalConfig.numThreads) + " threads.");
+            globalLogger.info("Using " + std::to_string(globalConfig.numThreads) + " parallel jobs.");
             globalLogger.info("Processing in batches of " + std::to_string(globalConfig.batchSize));
         } else {
             globalLogger.setMinLevel(LogLevel::WARNING); // Only show warnings and errors by default
         }
 
-        // Automatically determine optimal thread count if not specified
+        // Automatically determine optimal job count if not specified
         if (globalConfig.numThreads <= 0) {
             // Use available CPU cores minus 1 to leave a core for UI/system
             int availableCores = std::thread::hardware_concurrency();
             globalConfig.numThreads = availableCores > 1 ? availableCores - 1 : 1;
-            globalLogger.info("Auto-configured to use " + std::to_string(globalConfig.numThreads) + " threads.");
+            globalLogger.info("Auto-configured to use " + std::to_string(globalConfig.numThreads) + " parallel jobs.");
         }
 
         // Ensure TBB thread settings are applied
@@ -299,7 +313,7 @@ int main(int argc, char* argv[]) {
             tbb::global_control::max_allowed_parallelism, 
             globalConfig.numThreads
         );
-        globalLogger.debug("TBB configured with " + std::to_string(globalConfig.numThreads) + " threads");
+        globalLogger.debug("TBB configured with " + std::to_string(globalConfig.numThreads) + " max parallel jobs");
         #endif
 
         // Initialize descriptor factory
@@ -362,36 +376,27 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-        if (!result.count("input") || !result.count("output") || !result.count("descriptors")) {
-            std::cerr << "\033[1;31mError:\033[0m input, output, and descriptors are required arguments." << std::endl;
+        // Check if we have direct SMILES or input file
+        bool directSmilesMode = result.count("smiles") > 0;
+        bool hasInputFile = result.count("input") > 0;
+        bool hasOutputFile = result.count("output") > 0;
+        bool hasDescriptors = result.count("descriptors") > 0;
+
+        // Validate required arguments
+        if (!directSmilesMode && (!hasInputFile || !hasOutputFile || !hasDescriptors)) {
+            std::cerr << "\033[1;31mError:\033[0m Either --smiles or (--input, --output, and --descriptors) are required." << std::endl;
             printHelp(options);
             return 1;
         }
 
-        const std::string inputPath = result["input"].as<std::string>();
-        const std::string outputPath = result["output"].as<std::string>();
-        std::string descriptorsStr = result["descriptors"].as<std::string>();
-        std::string smilesColumn = result.count("smiles-column") ? result["smiles-column"].as<std::string>() : "SMILES";
-        std::string delimiter = result.count("delimiter") ? result["delimiter"].as<std::string>() : ",";
-        bool hasHeader = !result.count("no-header");
-
-        std::string escapeChar = result.count("escapechar") ? result["escapechar"].as<std::string>() : "\\";
-
-        // Use explicit path constructor
-        if (!std::filesystem::exists(std::filesystem::path(inputPath))) {
-            globalLogger.error("Input file does not exist: " + inputPath);
+        if (directSmilesMode && !hasDescriptors) {
+            std::cerr << "\033[1;31mError:\033[0m --descriptors is required when using --smiles." << std::endl;
+            printHelp(options);
             return 1;
         }
 
-        globalLogger.info("Processing input file: " + inputPath);
-        globalLogger.info("Output will be written to: " + outputPath);
-
-        // Move essential information to standard output
-        if (!globalConfig.verbose) {
-            std::cout << "\033[1;36mProcessing:\033[0m " << inputPath << " → " << outputPath << std::endl;
-        }
-
-        // Parse descriptors list
+        // Process descriptor list
+        std::string descriptorsStr = result["descriptors"].as<std::string>();
         std::vector<std::string> descriptorNames;
         if (descriptorsStr == "all") {
             descriptorNames = factory.getAvailableDescriptors();
@@ -411,366 +416,468 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-             if (descriptorNames.empty()) {
+            if (descriptorNames.empty()) {
                 globalLogger.error("No valid descriptors specified.");
                 return 1;
             }
             globalLogger.info("Using " + std::to_string(descriptorNames.size()) + " specified descriptors.");
         }
-        
-        // We need to handle smilesColumn as either a numeric index or a column name
-        int smilesColumnIndex = -1;
-        std::string smilesColumnName = "SMILES"; // Default column name
 
-        if (smilesColumn.size() > 0) {
-            try {
-                // If smilesColumn is numeric, convert to int directly
-                smilesColumnIndex = std::stoi(smilesColumn);
-            } catch (const std::invalid_argument&) {
-                // If it's not a number, it's a column name - we'll keep it as -1
-                // and use the column name
-                smilesColumnIndex = -1;
-                smilesColumnName = smilesColumn; // Set the column name
-                globalLogger.info("Looking for SMILES column named '" + smilesColumnName + "' in the header");
-            } catch (const std::exception& e) {
-                globalLogger.error("Error processing SMILES column specifier: " + std::string(e.what()));
+        if (directSmilesMode) {
+            // Handle direct SMILES input
+            std::string smilesStr = result["smiles"].as<std::string>();
+            std::string outputPath = hasOutputFile ? result["output"].as<std::string>() : "";
+            
+            // Process single SMILES
+            Molecule molecule(smilesStr);
+            if (!molecule.isValid()) {
+                globalLogger.error("Invalid SMILES string: " + smilesStr);
                 return 1;
             }
-        }
-
-        // Now create CsvIO with the proper types
-        CsvIO csvInputHandler(inputPath, outputPath, delimiter, smilesColumnIndex, hasHeader, escapeChar);
-
-        // We also need to tell CsvIO the name of the column if it's not an index
-        if (smilesColumnIndex == -1 && hasHeader) {
-            // Set the column name BEFORE parsing the header
-            csvInputHandler.setSmilesColumnName(smilesColumnName);
             
-            // Re-parse the header with the new column name
-            if (!csvInputHandler.reparseHeader()) {
-                globalLogger.fatal("Cannot proceed: SMILES column '" + smilesColumnName + "' not found in input file header.");
-                return 1;
-            }
-        }
-
-        // Output handler uses its own output path
-        CsvIO::ResultWriter resultWriter = csvInputHandler.createResultWriter(descriptorNames, csvInputHandler.getEscapeChar());
-
-        CsvIO::LineReader lineReader = csvInputHandler.createLineReader();
-
-        // Initialize progress bar using LineReader's estimation
-        size_t estimatedLines = 0;
-        try {
-            if (globalConfig.verbose) {
-                globalLogger.info("Estimating lines in input file...");
-            }
-            estimatedLines = lineReader.estimateTotalLines(); // Use estimation
-             if (estimatedLines == 0) { // Handle case where estimation failed or file is empty/small
-                 globalLogger.warning("Could not estimate lines accurately, defaulting to 1000 for progress bar.");
-                 estimatedLines = 1000;
-             }
-
-            if (globalConfig.verbose) {
-                globalLogger.info("Estimated " + std::to_string(estimatedLines) + " data lines in CSV file for progress bar.");
-            }
-        } catch (const std::exception& e) {
-            globalLogger.warning("Error estimating lines, defaulting to 1000: " + std::string(e.what()));
-            estimatedLines = 1000; // Default value if estimation fails
-        }
-        
-        globalLogger.info("Estimated total lines (approx): " + std::to_string(estimatedLines));
-        ProgressBar progressBar(estimatedLines, "Processing", 50);
-        progressBar.start();
-        auto startTime = std::chrono::steady_clock::now();
-        std::atomic<size_t> totalLinesProcessed{0};
-        std::atomic<size_t> totalMoleculesProcessed{0};
-        std::atomic<size_t> totalValidMoleculesWritten{0};
-
-        // Main processing loop - batch based approach
-        size_t effectiveBatchSize = globalConfig.batchSize;
-        globalLogger.debug("Using batch size: " + std::to_string(effectiveBatchSize));
-        size_t processedCount = 0;
-
-        // Check if stream mode is enabled (default) or disabled
-        bool streamMode = !result.count("no-stream");
-        if (streamMode) {
-            #ifdef WITH_TBB
-            globalLogger.info("Using row-by-row streaming mode with parallel descriptor calculation on " + 
-                             std::to_string(globalConfig.numThreads) + " threads");
-            #else
-            globalLogger.info("Using row-by-row streaming mode (single-threaded)");
-            #endif
+            std::cout << "\033[1;36mProcessing SMILES:\033[0m " << smilesStr << std::endl;
             
-            // Initialize MoleculeStream
-            MoleculeStream moleculeStream(inputPath);
-            
-            // Skip header if needed
-            if (hasHeader) {
-                moleculeStream.skipHeader();
+            // Calculate descriptors
+            std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> results;
+            for (const auto& descriptorName : descriptorNames) {
+                auto result = factory.calculate(descriptorName, molecule);
+                results[descriptorName].push_back(result);
             }
             
-            // Use a molecule queue to buffer between processing stages
-            #ifdef WITH_TBB
-            const size_t bufferSize = std::max(size_t(1), size_t(globalConfig.numThreads * 2));
-            tbb::concurrent_bounded_queue<std::pair<Molecule, std::vector<std::string>>> moleculeQueue;
-            moleculeQueue.set_capacity(bufferSize);
-            
-            std::atomic<bool> producerDone{false};
-            std::atomic<size_t> consumedCount{0};
-            
-            // Start consumer thread group
-            tbb::task_group descriptorGroup;
-            
-            // Function to process molecules from the queue
-            auto processQueuedMolecules = [&]() {
-                std::pair<Molecule, std::vector<std::string>> item;
-                
-                while (!producerDone || !moleculeQueue.empty()) {
-                    if (moleculeQueue.try_pop(item)) {
-                        Molecule& molecule = item.first;
-                        std::vector<std::string>& rowData = item.second;
-                        
-                        // Calculate descriptors for this molecule
-                        std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> results;
-                        
-                        for (const auto& descriptorName : descriptorNames) {
-                            std::variant<double, int, std::string> result = factory.calculate(descriptorName, molecule);
-                            results[descriptorName].push_back(result);
-                        }
-                        
-                        // Create a single-element batch for writing (needs mutex for thread safety)
-                        static std::mutex writeMutex;
-                        {
-                            std::lock_guard<std::mutex> lock(writeMutex);
-                            std::vector<Molecule> moleculeBatch = {molecule};
-                            std::vector<std::vector<std::string>> originalDataBatch = {rowData};
-                            
-                            // Write to output
-                            resultWriter.writeBatch(moleculeBatch, originalDataBatch, results, descriptorNames);
-                            
-                            // Update progress (thread-safe)
-                            progressBar.update(1);
-                            consumedCount.fetch_add(1, std::memory_order_relaxed);
-                        }
-                    } else {
-                        // No molecule available yet, yield to other threads
-                        std::this_thread::yield();
-                    }
-                }
-            };
-            
-            // Start consumer threads
-            for (int i = 0; i < globalConfig.numThreads; i++) {
-                descriptorGroup.run(processQueuedMolecules);
-            }
-            
-            // Producer: read molecules and push to queue
-            Molecule molecule;
-            std::vector<std::string> rowData;
-            
-            while (moleculeStream.nextWithOriginalData(molecule, rowData, delimiter, csvInputHandler.getSmilesIndex(), escapeChar)) {
-                // Make copies for thread safety
-                std::pair<Molecule, std::vector<std::string>> item = {molecule, rowData};
-                moleculeQueue.push(item);
-                processedCount++;
-                
-                // Clear for next row
-                rowData.clear();
-            }
-            
-            // Signal that production is complete
-            producerDone = true;
-            
-            // Wait for all processing to complete
-            descriptorGroup.wait();
-            
-            // Ensure final flush
-            resultWriter.flush();
-            #else
-            // Single-threaded fallback for streaming mode
-            Molecule molecule;
-            std::vector<std::string> rowData;
-            
-            // Process one molecule at a time
-            while (moleculeStream.nextWithOriginalData(molecule, rowData, delimiter, csvInputHandler.getSmilesIndex(), escapeChar)) {
-                // Calculate descriptors for this molecule
-                std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> results;
-                
-                for (const auto& descriptorName : descriptorNames) {
-                    std::variant<double, int, std::string> result = factory.calculate(descriptorName, molecule);
-                    results[descriptorName].push_back(result);
+            // Output results
+            if (hasOutputFile) {
+                // Write to CSV file
+                std::ofstream outFile(outputPath);
+                if (!outFile.is_open()) {
+                    globalLogger.error("Failed to open output file: " + outputPath);
+                    return 1;
                 }
                 
-                // Create a single-element batch for writing
-                std::vector<Molecule> moleculeBatch = {molecule};
-                std::vector<std::vector<std::string>> originalDataBatch = {rowData};
+                // Write header
+                outFile << "SMILES";
+                for (const auto& desc : descriptorNames) {
+                    outFile << "," << desc;
+                }
+                outFile << std::endl;
                 
-                // Write to output
-                resultWriter.writeBatch(moleculeBatch, originalDataBatch, results, descriptorNames);
+                // Write data
+                outFile << smilesStr;
+                for (const auto& desc : descriptorNames) {
+                    outFile << ",";
+                    const auto& value = results[desc][0];
+                    // Output value based on variant type
+                    std::visit([&outFile](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, double>)
+                            outFile << std::fixed << std::setprecision(6) << arg;
+                        else if constexpr (std::is_same_v<T, int>)
+                            outFile << arg;
+                        else if constexpr (std::is_same_v<T, std::string>)
+                            outFile << arg;
+                    }, value);
+                }
+                outFile << std::endl;
+                outFile.close();
                 
-                // Update progress
-                progressBar.update(1);
-                processedCount++;
-                
-                // Clear for next row
-                rowData.clear();
+                std::cout << "\033[1;32m✓\033[0m Results written to \033[1m" << outputPath << "\033[0m" << std::endl;
+            } else {
+                // Print to console
+                std::cout << "\033[1;36mResults:\033[0m" << std::endl;
+                for (const auto& desc : descriptorNames) {
+                    std::cout << "\033[1m" << desc << ":\033[0m ";
+                    const auto& value = results[desc][0];
+                    // Output value based on variant type
+                    std::visit([](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, double>)
+                            std::cout << std::fixed << std::setprecision(6) << arg;
+                        else if constexpr (std::is_same_v<T, int>)
+                            std::cout << arg;
+                        else if constexpr (std::is_same_v<T, std::string>)
+                            std::cout << arg;
+                    }, value);
+                    std::cout << std::endl;
+                }
             }
             
-            // Ensure final flush
-            resultWriter.flush();
-            #endif
+            return 0;
         } else {
-            // Original batch processing mode
-            #ifdef WITH_TBB
-            std::random_device rd;
-            std::mt19937 gen(rd()); // Mersenne Twister for random index
+            // Continue with regular file processing
+            const std::string inputPath = result["input"].as<std::string>();
+            const std::string outputPath = result["output"].as<std::string>();
+            std::string smilesColumn = result.count("smiles-col") ? result["smiles-col"].as<std::string>() : "SMILES";
+            std::string delimiter = result.count("delimiter") ? result["delimiter"].as<std::string>() : ",";
+            bool hasHeader = !result.count("no-header");
+            std::string escapeChar = result.count("escapechar") ? result["escapechar"].as<std::string>() : "\\";
+            
+            // Use explicit path constructor
+            if (!std::filesystem::exists(std::filesystem::path(inputPath))) {
+                globalLogger.error("Input file does not exist: " + inputPath);
+                return 1;
+            }
 
+            globalLogger.info("Processing input file: " + inputPath);
+            globalLogger.info("Output will be written to: " + outputPath);
+
+            // Move essential information to standard output
+            if (!globalConfig.verbose) {
+                std::cout << "\033[1;36mProcessing:\033[0m " << inputPath << " → " << outputPath << std::endl;
+            }
+
+            // We need to handle smilesColumn as either a numeric index or a column name
+            int smilesColumnIndex = -1;
+            std::string smilesColumnName = "SMILES"; // Default column name
+
+            if (smilesColumn.size() > 0) {
+                try {
+                    // If smilesColumn is numeric, convert to int directly
+                    smilesColumnIndex = std::stoi(smilesColumn);
+                } catch (const std::invalid_argument&) {
+                    // If it's not a number, it's a column name - we'll keep it as -1
+                    // and use the column name
+                    smilesColumnIndex = -1;
+                    smilesColumnName = smilesColumn; // Set the column name
+                    globalLogger.info("Looking for SMILES column named '" + smilesColumnName + "' in the header");
+                } catch (const std::exception& e) {
+                    globalLogger.error("Error processing SMILES column specifier: " + std::string(e.what()));
+                    return 1;
+                }
+            }
+
+            // Now create CsvIO with the proper types
+            CsvIO csvInputHandler(inputPath, outputPath, delimiter, smilesColumnIndex, hasHeader, escapeChar);
+
+            // We also need to tell CsvIO the name of the column if it's not an index
+            if (smilesColumnIndex == -1 && hasHeader) {
+                // Set the column name BEFORE parsing the header
+                csvInputHandler.setSmilesColumnName(smilesColumnName);
+                
+                // Re-parse the header with the new column name
+                if (!csvInputHandler.reparseHeader()) {
+                    globalLogger.fatal("Cannot proceed: SMILES column '" + smilesColumnName + "' not found in input file header.");
+                    return 1;
+                }
+            }
+
+            // Output handler uses its own output path
+            CsvIO::ResultWriter resultWriter = csvInputHandler.createResultWriter(descriptorNames, csvInputHandler.getEscapeChar());
+
+            CsvIO::LineReader lineReader = csvInputHandler.createLineReader();
+
+            // Initialize progress bar using LineReader's estimation
+            size_t estimatedLines = 0;
             try {
-                tbb::parallel_pipeline(
-                    globalConfig.numThreads,
-                    // Stage 1: Read batch (serial)
-                    tbb::make_filter<void, BatchLines>(
-                        tbb::filter_mode::serial_in_order,
-                        [&](tbb::flow_control& fc) -> BatchLines {
-                            BatchLines data;
-                            // Read raw lines using the line reader
-                            if (!lineReader.readBatch(data.lines, effectiveBatchSize) || data.lines.empty()) {
-                                fc.stop();
+                if (globalConfig.verbose) {
+                    globalLogger.info("Estimating lines in input file...");
+                }
+                estimatedLines = lineReader.estimateTotalLines(); // Use estimation
+                 if (estimatedLines == 0) { // Handle case where estimation failed or file is empty/small
+                     globalLogger.warning("Could not estimate lines accurately, defaulting to 1000 for progress bar.");
+                     estimatedLines = 1000;
+                 }
+
+                if (globalConfig.verbose) {
+                    globalLogger.info("Estimated " + std::to_string(estimatedLines) + " data lines in CSV file for progress bar.");
+                }
+            } catch (const std::exception& e) {
+                globalLogger.warning("Error estimating lines, defaulting to 1000: " + std::string(e.what()));
+                estimatedLines = 1000; // Default value if estimation fails
+            }
+            
+            globalLogger.info("Estimated total lines (approx): " + std::to_string(estimatedLines));
+            ProgressBar progressBar(estimatedLines, "Processing", 50);
+            progressBar.start();
+            auto startTime = std::chrono::steady_clock::now();
+            std::atomic<size_t> totalLinesProcessed{0};
+            std::atomic<size_t> totalMoleculesProcessed{0};
+            std::atomic<size_t> totalValidMoleculesWritten{0};
+
+            // Main processing loop - batch based approach
+            size_t effectiveBatchSize = globalConfig.batchSize;
+            globalLogger.debug("Using batch size: " + std::to_string(effectiveBatchSize));
+            size_t processedCount = 0;
+
+            // Check if stream mode is enabled (default) or disabled
+            bool streamMode = !result.count("no-stream");
+            if (streamMode) {
+                #ifdef WITH_TBB
+                globalLogger.info("Using row-by-row streaming mode with parallel descriptor calculation on " + 
+                                 std::to_string(globalConfig.numThreads) + " jobs");
+                #else
+                globalLogger.info("Using row-by-row streaming mode (single-threaded)");
+                #endif
+                
+                // Initialize MoleculeStream
+                MoleculeStream moleculeStream(inputPath);
+                
+                // Skip header if needed
+                if (hasHeader) {
+                    moleculeStream.skipHeader();
+                }
+                
+                // Use a molecule queue to buffer between processing stages
+                #ifdef WITH_TBB
+                const size_t bufferSize = std::max(size_t(1), size_t(globalConfig.numThreads * 2));
+                tbb::concurrent_bounded_queue<std::pair<Molecule, std::vector<std::string>>> moleculeQueue;
+                moleculeQueue.set_capacity(bufferSize);
+                
+                std::atomic<bool> producerDone{false};
+                std::atomic<size_t> consumedCount{0};
+                
+                // Start consumer thread group
+                tbb::task_group descriptorGroup;
+                
+                // Function to process molecules from the queue
+                auto processQueuedMolecules = [&]() {
+                    std::pair<Molecule, std::vector<std::string>> item;
+                    
+                    while (!producerDone || !moleculeQueue.empty()) {
+                        if (moleculeQueue.try_pop(item)) {
+                            Molecule& molecule = item.first;
+                            std::vector<std::string>& rowData = item.second;
+                            
+                            // Calculate descriptors for this molecule
+                            std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> results;
+                            
+                            for (const auto& descriptorName : descriptorNames) {
+                                std::variant<double, int, std::string> result = factory.calculate(descriptorName, molecule);
+                                results[descriptorName].push_back(result);
+                            }
+                            
+                            // Create a single-element batch for writing (needs mutex for thread safety)
+                            static std::mutex writeMutex;
+                            {
+                                std::lock_guard<std::mutex> lock(writeMutex);
+                                std::vector<Molecule> moleculeBatch = {molecule};
+                                std::vector<std::vector<std::string>> originalDataBatch = {rowData};
+                                
+                                // Write to output
+                                resultWriter.writeBatch(moleculeBatch, originalDataBatch, results, descriptorNames);
+                                
+                                // Update progress (thread-safe)
+                                progressBar.update(1);
+                                consumedCount.fetch_add(1, std::memory_order_relaxed);
+                            }
+                        } else {
+                            // No molecule available yet, yield to other threads
+                            std::this_thread::yield();
+                        }
+                    }
+                };
+                
+                // Start consumer threads
+                for (int i = 0; i < globalConfig.numThreads; i++) {
+                    descriptorGroup.run(processQueuedMolecules);
+                }
+                
+                // Producer: read molecules and push to queue
+                Molecule molecule;
+                std::vector<std::string> rowData;
+                
+                while (moleculeStream.nextWithOriginalData(molecule, rowData, delimiter, csvInputHandler.getSmilesIndex(), escapeChar)) {
+                    // Make copies for thread safety
+                    std::pair<Molecule, std::vector<std::string>> item = {molecule, rowData};
+                    moleculeQueue.push(item);
+                    processedCount++;
+                    
+                    // Clear for next row
+                    rowData.clear();
+                }
+                
+                // Signal that production is complete
+                producerDone = true;
+                
+                // Wait for all processing to complete
+                descriptorGroup.wait();
+                
+                // Ensure final flush
+                resultWriter.flush();
+                #else
+                // Single-threaded fallback for streaming mode
+                Molecule molecule;
+                std::vector<std::string> rowData;
+                
+                // Process one molecule at a time
+                while (moleculeStream.nextWithOriginalData(molecule, rowData, delimiter, csvInputHandler.getSmilesIndex(), escapeChar)) {
+                    // Calculate descriptors for this molecule
+                    std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> results;
+                    
+                    for (const auto& descriptorName : descriptorNames) {
+                        std::variant<double, int, std::string> result = factory.calculate(descriptorName, molecule);
+                        results[descriptorName].push_back(result);
+                    }
+                    
+                    // Create a single-element batch for writing
+                    std::vector<Molecule> moleculeBatch = {molecule};
+                    std::vector<std::vector<std::string>> originalDataBatch = {rowData};
+                    
+                    // Write to output
+                    resultWriter.writeBatch(moleculeBatch, originalDataBatch, results, descriptorNames);
+                    
+                    // Update progress
+                    progressBar.update(1);
+                    processedCount++;
+                    
+                    // Clear for next row
+                    rowData.clear();
+                }
+                
+                // Ensure final flush
+                resultWriter.flush();
+                #endif
+            } else {
+                // Original batch processing mode
+                #ifdef WITH_TBB
+                std::random_device rd;
+                std::mt19937 gen(rd()); // Mersenne Twister for random index
+
+                try {
+                    tbb::parallel_pipeline(
+                        globalConfig.numThreads,
+                        // Stage 1: Read batch (serial)
+                        tbb::make_filter<void, BatchLines>(
+                            tbb::filter_mode::serial_in_order,
+                            [&](tbb::flow_control& fc) -> BatchLines {
+                                BatchLines data;
+                                // Read raw lines using the line reader
+                                if (!lineReader.readBatch(data.lines, effectiveBatchSize) || data.lines.empty()) {
+                                    fc.stop();
+                                    return data;
+                                }
+                                totalLinesProcessed += data.lines.size();
                                 return data;
                             }
-                            totalLinesProcessed += data.lines.size();
-                            return data;
-                        }
-                    ) &
-                    // Stage 2: Parse Lines and Extract SMILES (parallel)
-                    tbb::make_filter<BatchLines, SmilesData>(
-                        tbb::filter_mode::parallel,
-                        [&](const BatchLines& input) -> SmilesData {
-                            SmilesData data;
-                            data.smiles.reserve(input.lines.size());
-                            data.originalData.reserve(input.lines.size());
-                            const std::string& delim = csvInputHandler.getDelimiter(); // Get delimiter once
-                            int smilesIdx = csvInputHandler.getSmilesIndex();
+                        ) &
+                        // Stage 2: Parse Lines and Extract SMILES (parallel)
+                        tbb::make_filter<BatchLines, SmilesData>(
+                            tbb::filter_mode::parallel,
+                            [&](const BatchLines& input) -> SmilesData {
+                                SmilesData data;
+                                data.smiles.reserve(input.lines.size());
+                                data.originalData.reserve(input.lines.size());
+                                const std::string& delim = csvInputHandler.getDelimiter(); // Get delimiter once
+                                int smilesIdx = csvInputHandler.getSmilesIndex();
 
-                            for (const auto& line : input.lines) {
-                                std::vector<std::string> parsedLine = CsvIO::parseCsvLine(line, delim);
-                                if (smilesIdx >= 0 && static_cast<size_t>(smilesIdx) < parsedLine.size()) {
-                                    data.smiles.push_back(parsedLine[smilesIdx]);
-                                    data.originalData.push_back(std::move(parsedLine)); // Store full parsed line
-                                } else {
-                                    // Handle line with missing smiles column - add placeholder?
-                                    globalLogger.debug("Skipping line due to missing SMILES at index " + std::to_string(smilesIdx));
-                                    data.smiles.push_back(""); // Add empty smiles
-                                    data.originalData.push_back(std::move(parsedLine)); // Still store original data
+                                for (const auto& line : input.lines) {
+                                    std::vector<std::string> parsedLine = CsvIO::parseCsvLine(line, delim);
+                                    if (smilesIdx >= 0 && static_cast<size_t>(smilesIdx) < parsedLine.size()) {
+                                        data.smiles.push_back(parsedLine[smilesIdx]);
+                                        data.originalData.push_back(std::move(parsedLine)); // Store full parsed line
+                                    } else {
+                                        // Handle line with missing smiles column - add placeholder?
+                                        globalLogger.debug("Skipping line due to missing SMILES at index " + std::to_string(smilesIdx));
+                                        data.smiles.push_back(""); // Add empty smiles
+                                        data.originalData.push_back(std::move(parsedLine)); // Still store original data
+                                    }
                                 }
+                                return data;
                             }
-                            return data;
-                        }
-                    ) &
-                    // Stage 3: Create MoleculeBatch & Update Display (parallel)
-                    tbb::make_filter<SmilesData, std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>>>(
-                       tbb::filter_mode::parallel,
-                       [&](SmilesData input) -> std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>> {
-                           // Create batch directly from SMILES vector
-                           auto batch = std::make_shared<MoleculeBatch>(input.smiles.size());
-                           batch->addSmilesBatch(input.smiles); // This handles parsing internally
+                        ) &
+                        // Stage 3: Create MoleculeBatch & Update Display (parallel)
+                        tbb::make_filter<SmilesData, std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>>>(
+                           tbb::filter_mode::parallel,
+                           [&](SmilesData input) -> std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>> {
+                               // Create batch directly from SMILES vector
+                               auto batch = std::make_shared<MoleculeBatch>(input.smiles.size());
+                               batch->addSmilesBatch(input.smiles); // This handles parsing internally
 
-                           // Pass the originalData vector along, using move semantics
-                           return {batch, std::move(input.originalData)};
-                       }
-                    ) &
-                    // Stage 4: Calculate descriptors (parallel)
-                    tbb::make_filter<std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>>, BatchWithResults>(
-                        tbb::filter_mode::parallel,
-                         [&](std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>> input) -> BatchWithResults {
-                             auto results = factory.calculateBatch(descriptorNames, *(input.first));
-                             // Use move semantics when creating BatchWithResults
-                             return {std::move(input.first), std::move(input.second), std::move(results)};
-                         }
-                    ) &
-                     // Stage 5: Write results (serial)
-                     tbb::make_filter<BatchWithResults, void>(
-                         tbb::filter_mode::serial_in_order,
-                         [&](const BatchWithResults& data) {
-                             // Count valid molecules written in this batch
-                             size_t validWrittenInBatch = 0;
-                             const auto& moleculesInBatch = data.batch->getMolecules();
-                             for(const auto& m : moleculesInBatch) {
-                                 if (m.isValid()) {
-                                     validWrittenInBatch++;
-                                 }
+                               // Pass the originalData vector along, using move semantics
+                               return {batch, std::move(input.originalData)};
+                           }
+                        ) &
+                        // Stage 4: Calculate descriptors (parallel)
+                        tbb::make_filter<std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>>, BatchWithResults>(
+                            tbb::filter_mode::parallel,
+                             [&](std::pair<std::shared_ptr<MoleculeBatch>, std::vector<std::vector<std::string>>> input) -> BatchWithResults {
+                                 auto results = factory.calculateBatch(descriptorNames, *(input.first));
+                                 // Use move semantics when creating BatchWithResults
+                                 return {std::move(input.first), std::move(input.second), std::move(results)};
                              }
+                        ) &
+                         // Stage 5: Write results (serial)
+                         tbb::make_filter<BatchWithResults, void>(
+                             tbb::filter_mode::serial_in_order,
+                             [&](const BatchWithResults& data) {
+                                 // Count valid molecules written in this batch
+                                 size_t validWrittenInBatch = 0;
+                                 const auto& moleculesInBatch = data.batch->getMolecules();
+                                 for(const auto& m : moleculesInBatch) {
+                                     if (m.isValid()) {
+                                         validWrittenInBatch++;
+                                     }
+                                 }
 
-                             resultWriter.writeBatch(
-                                 moleculesInBatch,
-                                 data.originalData, // Pass the original data rows
-                                 data.results,
-                                 descriptorNames
-                             );
-                             resultWriter.flush(); // Make sure to flush after writing
-                             progressBar.update(moleculesInBatch.size());
-                             processedCount += moleculesInBatch.size();
-                         }
-                     )
-                 );
-            } catch (const std::exception& e) {
-                progressBar.finish(); // Ensure progress bar is stopped on error
-                globalLogger.fatal("Processing pipeline error: " + std::string(e.what()));
-                return 1; // Exit after fatal error
-            }
-            #else
-             // --- Single-threaded fallback ---
-              globalLogger.warning("TBB not enabled. Running single-threaded.");
-              std::vector<std::string> lines;
-              std::vector<std::string> smilesBatch;
-              std::vector<std::vector<std::string>> originalDataBatch;
+                                 resultWriter.writeBatch(
+                                     moleculesInBatch,
+                                     data.originalData, // Pass the original data rows
+                                     data.results,
+                                     descriptorNames
+                                 );
+                                 resultWriter.flush(); // Make sure to flush after writing
+                                 progressBar.update(moleculesInBatch.size());
+                                 processedCount += moleculesInBatch.size();
+                             }
+                         )
+                     );
+                } catch (const std::exception& e) {
+                    progressBar.finish(); // Ensure progress bar is stopped on error
+                    globalLogger.fatal("Processing pipeline error: " + std::string(e.what()));
+                    return 1; // Exit after fatal error
+                }
+                #else
+                 // --- Single-threaded fallback ---
+                  globalLogger.warning("TBB not enabled. Running single-threaded.");
+                  std::vector<std::string> lines;
+                  std::vector<std::string> smilesBatch;
+                  std::vector<std::vector<std::string>> originalDataBatch;
 
-              while (lineReader.readBatchWithOriginalData(smilesBatch, originalDataBatch, effectiveBatchSize, csvInputHandler.getSmilesIndex(), csvInputHandler.getPropertyIndicesToKeep(), csvInputHandler.getDelimiter())) {
-                  totalLinesProcessed += originalDataBatch.size(); // Count raw lines read
+                  while (lineReader.readBatchWithOriginalData(smilesBatch, originalDataBatch, effectiveBatchSize, csvInputHandler.getSmilesIndex(), csvInputHandler.getPropertyIndicesToKeep(), csvInputHandler.getDelimiter())) {
+                      totalLinesProcessed += originalDataBatch.size(); // Count raw lines read
 
-                  auto moleculeBatch = std::make_shared<MoleculeBatch>(smilesBatch.size());
-                  moleculeBatch->addSmilesBatch(smilesBatch); // Parse SMILES
+                      auto moleculeBatch = std::make_shared<MoleculeBatch>(smilesBatch.size());
+                      moleculeBatch->addSmilesBatch(smilesBatch); // Parse SMILES
 
-                  auto results = factory.calculateBatch(descriptorNames, *moleculeBatch);
+                      auto results = factory.calculateBatch(descriptorNames, *moleculeBatch);
 
-                  size_t validWrittenInBatch = 0;
-                  const auto& moleculesInBatch = moleculeBatch->getMolecules();
-                   for(const auto& m : moleculesInBatch) {
-                       if (m.isValid()) {
-                           validWrittenInBatch++;
+                      size_t validWrittenInBatch = 0;
+                      const auto& moleculesInBatch = moleculeBatch->getMolecules();
+                       for(const auto& m : moleculesInBatch) {
+                           if (m.isValid()) {
+                               validWrittenInBatch++;
+                           }
                        }
-                   }
 
-                  resultWriter.writeBatch(moleculesInBatch, originalDataBatch, results, descriptorNames);
-                  resultWriter.flush(); // Make sure to flush after writing
-                  progressBar.update(moleculesInBatch.size());
-                  processedCount += moleculesInBatch.size();
+                      resultWriter.writeBatch(moleculesInBatch, originalDataBatch, results, descriptorNames);
+                      resultWriter.flush(); // Make sure to flush after writing
+                      progressBar.update(moleculesInBatch.size());
+                      processedCount += moleculesInBatch.size();
 
-                  // Clear for next batch
-                  smilesBatch.clear();
-                  originalDataBatch.clear();
-              }
-             #endif // WITH_TBB
+                      // Clear for next batch
+                      smilesBatch.clear();
+                      originalDataBatch.clear();
+                  }
+                 #endif // WITH_TBB
+            }
+            
+            progressBar.finish();
+            auto endTime = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+            
+            // Always display final summary regardless of verbose mode
+            std::cout << "\033[1;32m✓\033[0m Processed \033[1m" << processedCount << "\033[0m valid molecules" << std::endl;
+            std::cout << "\033[1;32m✓\033[0m Results written to \033[1m" << outputPath << "\033[0m" << std::endl;
+            std::cout << "\033[1;32m✓\033[0m Total processing time: \033[1m" << (duration.count() / 1000.0) << "\033[0m seconds" << std::endl;
+
+            // Keep the detailed logging for verbose mode
+            if (globalConfig.verbose) {
+                globalLogger.info("Processing complete. Processed " + std::to_string(processedCount) + " valid molecules.");
+                globalLogger.info("Results written successfully to " + outputPath);
+                globalLogger.info("Total processing time: " + std::to_string(duration.count() / 1000.0) + " seconds");
+            }
         }
-        
-        progressBar.finish();
-        auto endTime = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        
-        // Always display final summary regardless of verbose mode
-        std::cout << "\033[1;32m✓\033[0m Processed \033[1m" << processedCount << "\033[0m valid molecules" << std::endl;
-        std::cout << "\033[1;32m✓\033[0m Results written to \033[1m" << outputPath << "\033[0m" << std::endl;
-        std::cout << "\033[1;32m✓\033[0m Total processing time: \033[1m" << (duration.count() / 1000.0) << "\033[0m seconds" << std::endl;
-
-        // Keep the detailed logging for verbose mode
-        if (globalConfig.verbose) {
-            globalLogger.info("Processing complete. Processed " + std::to_string(processedCount) + " valid molecules.");
-            globalLogger.info("Results written successfully to " + outputPath);
-            globalLogger.info("Total processing time: " + std::to_string(duration.count() / 1000.0) + " seconds");
-        }
-
     } catch (const cxxopts::exceptions::parsing& e) {
         std::cerr << "\033[1;31mError parsing options:\033[0m " << e.what() << std::endl;
+        printHelp(options);
         return 1;
     } catch (const DescriptorException& e) {
         std::cerr << "\033[1;31mDescriptor error:\033[0m " << e.what() << std::endl;
