@@ -28,5 +28,4 @@ pka_bases/
 pka_acids/
 .cache/
 build/
-models/
-
+backup/

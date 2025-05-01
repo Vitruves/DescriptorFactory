@@ -73,7 +73,9 @@ float SolubilityRandomForestModel::predict(const std::vector<float>& features) c
     float sum = 0.0f;
     for (const auto& tree : trees) {
         int node_id = 0;
-        while (true) {
+        int max_nodes = static_cast<int>(tree.size());
+        int steps = 0;
+        while (node_id >= 0 && node_id < max_nodes && steps < max_nodes) {
             const SolubilityTreeNode& node = tree[node_id];
             if (node.left_child == -1) {
                 sum += node.value;
@@ -81,13 +83,16 @@ float SolubilityRandomForestModel::predict(const std::vector<float>& features) c
             }
             if (node.feature >= 0 && static_cast<size_t>(node.feature) < features.size()) {
                 if (features[node.feature] <= node.threshold) {
+                    if (node.left_child < 0 || node.left_child >= max_nodes) break;
                     node_id = node.left_child;
                 } else {
+                    if (node.right_child < 0 || node.right_child >= max_nodes) break;
                     node_id = node.right_child;
                 }
             } else {
                 break;
             }
+            steps++;
         }
     }
     return (n_estimators > 0) ? (sum / n_estimators) : 0.0f;

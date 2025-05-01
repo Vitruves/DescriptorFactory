@@ -266,6 +266,8 @@ set(LIB_SOURCES
     src/descriptors/morgan.cpp
     src/descriptors/eigen.cpp
     src/descriptors/solubility.cpp
+    src/descriptors/counts.cpp
+    src/descriptors/image.cpp
 )
 
 if(WITH_CUDA)

@@ -40,34 +40,7 @@ struct RandomForestModel {
     int ngram_min;
     int ngram_max;
     
-    // Keep predict definition here if simple, or move implementation to cpp
-    float predict(const std::vector<float>& features) const {
-        float sum = 0.0f;
-        for (const auto& tree : trees) {
-            int node_id = 0;
-            while (true) {
-                const TreeNode& node = tree[node_id];
-                if (node.left_child == -1) { // Leaf node
-                    sum += node.value;
-                    break;
-                }
-                // Ensure features access is safe
-                if (node.feature >= 0 && static_cast<size_t>(node.feature) < features.size()) {
-                     if (features[node.feature] <= node.threshold) {
-                         node_id = node.left_child;
-                     } else {
-                         node_id = node.right_child;
-                     }
-                } else {
-                    // Handle error: invalid feature index
-                    // For simplicity, let's break (consider logging/throwing)
-                     // globalLogger.error("Invalid feature index in RF predict: " + std::to_string(node.feature));
-                     break;
-                }
-            }
-        }
-        return (n_estimators > 0) ? (sum / n_estimators) : 0.0f; // Avoid division by zero
-    }
+    float predict(const std::vector<float>& features) const; // Declaration only, no body!
 };
 
 // Common utility functions for PKA descriptors

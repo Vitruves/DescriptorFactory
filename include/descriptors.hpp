@@ -79,6 +79,9 @@ public:
     // Calculate multiple descriptors for a batch of molecules
     std::unordered_map<std::string, std::vector<std::variant<double, int, std::string>>> 
     calculateBatch(const std::vector<std::string>& descriptorNames, const MoleculeBatch& batch) const;
+
+    // Add declaration for registerAllDescriptors
+    void registerAllDescriptors();
 };
 
 // Implementation of common descriptors

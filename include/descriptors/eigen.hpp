@@ -1,6 +1,7 @@
 #pragma once
 
 #include "descriptors.hpp"
+#include "descriptors/eigen_detail.hpp"
 #include <Eigen/Dense>
 #include <Eigen/Eigenvalues>
 #include <GraphMol/Atom.h>
@@ -27,7 +28,6 @@ protected:
     // Base cache entry struct
     struct CacheEntry {
         std::chrono::steady_clock::time_point lastAccess;
-        // size_t approximateSize = 0; // Memory tracking removed for simplicity/performance
     };
 
     // Matrix cache entry: Stores the computed matrix
@@ -50,13 +50,13 @@ protected:
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> signlessLaplacianCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> weightedAdjacencyCache;
     static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> distanceMatrixCache;
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedAdjCache; // Added cache
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedLapCache; // Added cache
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> normalizedAdjCache; // Added cache
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow2Cache; // Added cache for A^2
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow3Cache; // Added cache for A^3
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow4Cache; // Added cache for A^4
-    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> lapPow2Cache; // Added cache for L^2
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedAdjCache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> atomicNumWeightedLapCache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> normalizedAdjCache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow2Cache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow3Cache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> adjPow4Cache;
+    static thread_local std::unordered_map<const RDKit::ROMol*, MatrixCacheEntry> lapPow2Cache;
 
     // --- Eigenvalue Cache ---
     // Hash function for Eigen matrices (simple version based on size and corner values)
@@ -152,32 +152,47 @@ protected:
     // Template for getting matrix from cache or building it
     template<typename CacheMap, typename BuildFunc>
     const Eigen::MatrixXd& getOrBuildMatrix(const RDKit::ROMol* mol, CacheMap& cache, BuildFunc builder) const {
+        if (!mol) {
+            static const Eigen::MatrixXd empty_matrix(0, 0);
+            return empty_matrix;
+        }
+
         auto it = cache.find(mol);
         if (it != cache.end()) {
-            it->second.lastAccess = std::chrono::steady_clock::now();
-            return it->second.matrix;
+            if (!detail::isMatrixSizeValid(it->second.matrix)) {
+                cache.erase(it); // Remove invalid cached matrix
+            } else {
+                it->second.lastAccess = std::chrono::steady_clock::now();
+                return it->second.matrix;
+            }
         }
 
         checkAndCleanupCaches(); // Check before building potentially large matrix
         Eigen::MatrixXd matrix = builder(mol);
-        cache[mol] = {std::chrono::steady_clock::now(), std::move(matrix)}; // Use move
-        return cache[mol].matrix; // Return the cached copy
+        
+        // Validate the built matrix
+        if (!detail::isMatrixSizeValid(matrix)) {
+            static const Eigen::MatrixXd empty_matrix(0, 0);
+            return empty_matrix;
+        }
+
+        cache[mol] = MatrixCacheEntry{{std::chrono::steady_clock::now()}, std::move(matrix)};
+        return cache[mol].matrix;
     }
 
     // Template for getting vector (Eigenvalues, SingularValues, Eigenvectors) from cache or computing
     template<typename CacheMap, typename ComputeFunc>
     const Eigen::VectorXd& getOrComputeVector(const Eigen::MatrixXd& matrix, CacheMap& cache, ComputeFunc computer) const {
-         auto it = cache.find(matrix);
-         if (it != cache.end()) {
-             it->second.lastAccess = std::chrono::steady_clock::now();
-             return it->second.eigenvalues; // Reuse EigenvalueCacheEntry struct
-         }
+        auto it = cache.find(matrix);
+        if (it != cache.end()) {
+            it->second.lastAccess = std::chrono::steady_clock::now();
+            return it->second.eigenvalues;
+        }
 
-         checkAndCleanupCaches();
-         Eigen::VectorXd vec = computer(matrix);
-         // Use MatrixXd as key for EigenvalueCache
-         cache[matrix] = {std::chrono::steady_clock::now(), std::move(vec)}; // Use move
-         return cache[matrix].eigenvalues; // Return cached copy
+        checkAndCleanupCaches();
+        Eigen::VectorXd vec = computer(matrix);
+        cache[matrix] = EigenvalueCacheEntry{{std::chrono::steady_clock::now()}, std::move(vec)};
+        return cache[matrix].eigenvalues;
     }
 
     // Specific getters using the templates
@@ -240,21 +255,21 @@ protected:
        }
        const Eigen::MatrixXd& getAdjPow2(const RDKit::ROMol* mol) const {
             return getOrBuildMatrix(mol, adjPow2Cache, [this](const RDKit::ROMol* m){
-                Eigen::MatrixXd adj = getAdjacencyMatrix(m);
-                return adj * adj;
+                const Eigen::MatrixXd& adj = getAdjacencyMatrix(m);
+                return detail::safeMatrixMultiply(adj, adj);
             });
         }
         const Eigen::MatrixXd& getAdjPow3(const RDKit::ROMol* mol) const {
              return getOrBuildMatrix(mol, adjPow3Cache, [this](const RDKit::ROMol* m){
-                 Eigen::MatrixXd adj2 = getAdjPow2(m); // Use cached A^2
-                 Eigen::MatrixXd adj = getAdjacencyMatrix(m);
-                 return adj2 * adj;
+                 const Eigen::MatrixXd& adj2 = getAdjPow2(m);
+                 const Eigen::MatrixXd& adj = getAdjacencyMatrix(m);
+                 return detail::safeMatrixMultiply(adj2, adj);
              });
          }
         const Eigen::MatrixXd& getAdjPow4(const RDKit::ROMol* mol) const {
              return getOrBuildMatrix(mol, adjPow4Cache, [this](const RDKit::ROMol* m){
-                 Eigen::MatrixXd adj2 = getAdjPow2(m); // Use cached A^2
-                 return adj2 * adj2;
+                 const Eigen::MatrixXd& adj2 = getAdjPow2(m);
+                 return detail::safeMatrixMultiply(adj2, adj2);
              });
          }
         const Eigen::MatrixXd& getLapPow2(const RDKit::ROMol* mol) const {

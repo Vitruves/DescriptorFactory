@@ -14,6 +14,8 @@
 #include "descriptors/pka.hpp"
 #include "descriptors/vague8.hpp"
 #include "descriptors/solubility.hpp"
+#include "descriptors/counts.hpp"
+#include "descriptors/image.hpp"
 #include <GraphMol/Descriptors/MolDescriptors.h>
 #include <GraphMol/GraphMol.h>
 #include <GraphMol/MolOps.h>
@@ -894,15 +896,176 @@ DescriptorFactory::DescriptorFactory() {
     // Register Solubility Descriptor
     registerDescriptor(std::make_unique<desfact::descriptors::SolubilityDescriptor>());
 
+    // Register Count descriptors
+    registerDescriptor(std::make_unique<desfact::descriptors::HalogenCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::CarbonCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::HydrogenCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::OxygenCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NitrogenCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::SulfurCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AromaticAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NonAromaticAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::DoubleBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::TripleBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::SingleBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AcidicFunctionCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::BasicFunctionCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::ENAtoms2BondsFromAcidic>());
+    registerDescriptor(std::make_unique<desfact::descriptors::ENAtoms2BondsFromBasic>());
+    registerDescriptor(std::make_unique<desfact::descriptors::ENAtoms3BondsFromAcidic>());
+    registerDescriptor(std::make_unique<desfact::descriptors::ENAtoms3BondsFromBasic>());
+
+    // Register new counts
+    registerDescriptor(std::make_unique<desfact::descriptors::LongestCSequenceSmiles>());
+    registerDescriptor(std::make_unique<desfact::descriptors::UppercaseCountSmiles>());
+    registerDescriptor(std::make_unique<desfact::descriptors::LowercaseCountSmiles>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AtomVolumeSum>());
+
+    // Register new count descriptors
+    registerDescriptor(std::make_unique<desfact::descriptors::HeavyAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::HeteroatomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::ChiralCenterCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FormalChargeCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::PositiveChargeCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NegativeChargeCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RotatableBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::BridgeheadAtomCount>());
+
+    // Image-based descriptors
+    registerDescriptor(std::make_unique<descriptors::BoundingBoxAreaDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MoleculeWidthDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MoleculeHeightDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AspectRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomDensityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MaxAtomRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinAtomRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondLengthDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MaxBondLengthDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinBondLengthDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondLengthStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomAtomDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomLuminanceDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MaxAtomAtomDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinAtomAtomDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomAreaDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MedianAtomRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MedianBondLengthDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomRadiusRangeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaFractionDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondCoverageFractionDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomPackingDensityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomMassXDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomMassYDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomMassDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomRadiusStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondAngleStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomXStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomYStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomLuminanceStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondLenMADDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomRadiusMADDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaStdDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomRadiusCVDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaCVDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomLuminanceCVDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaRangeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaMedianDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaMADDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaHullFracDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AtomAreaCenterFracDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::StdAllAtomDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinBondAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MaxBondAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MedianBondAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondColorDiffDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondLuminanceDiffDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondLenDiffColorDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanDistSameColorDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanDistDiffColorDescriptor>());
+
+    // Image-based descriptors (continued)
+    registerDescriptor(std::make_unique<descriptors::MeanBondAngleDiffColorDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondRadiiDiffDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondLuminanceDiff2Descriptor>()); // Note: Duplicate functionality?
+    registerDescriptor(std::make_unique<descriptors::MeanAngleHighDegreeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BoundaryAtomRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomEccentricityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MolecularDiameterDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MolecularRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RadiusOfGyrationDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MolecularSphericityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BondLenToAtomRadiusRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::EdgeDensityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::PlanarityMeasureDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanNearestNeighborDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomsInRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::VarNearestNeighborDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondToBondAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MomentOfInertiaDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomCentralityDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::TerminalAtomCountDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::JunctionAtomCountDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::TerminalToJunctionRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::WienerIndexDescriptor>()); // Image-based Wiener Index
+    registerDescriptor(std::make_unique<descriptors::RingCountDescriptor>()); // Image-based Ring Count
+    registerDescriptor(std::make_unique<descriptors::AcidicCenterCountDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::BasicCenterCountDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AcidicToBasicRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicAcidicDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBasicBasicDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicBasicDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinAcidicBasicDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomsNearAcidicDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomsNearBasicDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBasicRadiusDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicCentroidDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBasicCentroidDistDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracAcidicOnHullDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracBasicOnHullDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBasicAngleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAcidicLuminanceDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBasicLuminanceDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AcidicBasicLuminanceDiffDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FractalDimensionDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ForegroundRatioDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::AverageColorDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ColorVarianceDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ImageCenterXDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ImageCenterYDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::ImageOrientationDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanLenSingleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanLenDoubleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanLenTripleDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanLenAromaticDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracDeg1Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracDeg2Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracDeg3Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracDeg4Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanBondOrderDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracDoubleBondsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracTripleBondsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::FracAromaticBondsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanAtomDegreeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MaxAtomDegreeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MinAtomDegreeDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::MeanDistToCentroidDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::StdDistToCentroidDescriptor>());
+
+
     globalLogger.info("Initialized descriptor factory with " +
                      std::to_string(descriptors.size()) + " descriptors");
 }
 
 void DescriptorFactory::registerDescriptor(std::unique_ptr<Descriptor> descriptor) {
-    if (!descriptor) return;
-    
-    std::string name = descriptor->getName();
-    descriptors[name] = std::move(descriptor);
+    if (descriptor) {
+        descriptors[descriptor->getName()] = std::move(descriptor);
+    }
 }
 
 const Descriptor* DescriptorFactory::getDescriptor(const std::string& name) const {
@@ -1081,5 +1244,4 @@ DescriptorFactory::calculateBatch(const std::vector<std::string>& descriptorName
     }
     return finalResults;
 }
-
-}  // namespace desfact
+}

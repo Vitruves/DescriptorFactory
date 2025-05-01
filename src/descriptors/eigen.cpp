@@ -5,11 +5,11 @@
 #include <GraphMol/BondIterators.h>
 #include <GraphMol/AtomIterators.h>
 #include <cmath>
-#include <limits> // Needed for WienerIndex, GraphEccentricity, GraphDiameter, DegreeMatrixMinDegree
-#include <vector>  // Needed for sorting eigenvalues/resistances/coefficients
-#include <algorithm> // Needed for std::sort, std::max, std::min
-#include <map> // Needed for DegreeMatrixEntropy
-#include "utils.hpp" // Ensure this path is correct
+#include <limits>
+#include <vector>
+#include <algorithm>
+#include <map>
+#include "utils.hpp"
 #include <GraphMol/MolOps.h>
 
 namespace desfact {
@@ -21,21 +21,19 @@ thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCach
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::laplacianCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::normalizedLaplacianCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::signlessLaplacianCache;
+thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow2Cache;
+thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow3Cache;
+thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow4Cache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::weightedAdjacencyCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::distanceMatrixCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::atomicNumWeightedAdjCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::atomicNumWeightedLapCache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::normalizedAdjCache;
-thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow2Cache;
-thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow3Cache;
-thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::adjPow4Cache;
 thread_local std::unordered_map<const RDKit::ROMol*, EigenDescriptor::MatrixCacheEntry> EigenDescriptor::lapPow2Cache;
 
 thread_local std::unordered_map<Eigen::MatrixXd, EigenDescriptor::EigenvalueCacheEntry, EigenDescriptor::MatrixHash, EigenDescriptor::MatrixEqual> EigenDescriptor::eigenvalueCache;
 thread_local std::unordered_map<Eigen::MatrixXd, EigenDescriptor::EigenvalueCacheEntry, EigenDescriptor::MatrixHash, EigenDescriptor::MatrixEqual> EigenDescriptor::singularValueCache;
 thread_local std::unordered_map<Eigen::MatrixXd, EigenDescriptor::EigenvalueCacheEntry, EigenDescriptor::MatrixHash, EigenDescriptor::MatrixEqual> EigenDescriptor::dominantEigenvectorCache;
-
-// --- Implementations ONLY for non-template, non-inline functions declared in the header ---
 
 // EigenDescriptor base class implementation
 EigenDescriptor::EigenDescriptor(const std::string& name, const std::string& description)
@@ -1412,16 +1410,24 @@ std::variant<double, int, std::string> WeightedAdjacencySpectralRadius::calculat
 
 // Miscellaneous / Complex
 MeanFirstPassageTime::MeanFirstPassageTime() : EigenDescriptor("MeanFirstPassage", "Mean first passage time (Requires pseudo-inverse)") {}
-std::variant<double, int, std::string> MeanFirstPassageTime::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> MeanFirstPassageTime::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 CommuteTimeDistance::CommuteTimeDistance() : EigenDescriptor("CommuteTime", "Commute time distance (Requires pseudo-inverse)") {}
-std::variant<double, int, std::string> CommuteTimeDistance::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> CommuteTimeDistance::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 KirchhoffIndexVariance::KirchhoffIndexVariance() : EigenDescriptor("KirchhoffVar", "Kirchhoff index variance (Requires subgraphs/minors)") {}
-std::variant<double, int, std::string> KirchhoffIndexVariance::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> KirchhoffIndexVariance::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 EffectiveGraphResistanceDistribution::EffectiveGraphResistanceDistribution() : EigenDescriptor("EffGraphResDist", "Effective graph resistance distribution (Requires pseudo-inverse)") {}
-std::variant<double, int, std::string> EffectiveGraphResistanceDistribution::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> EffectiveGraphResistanceDistribution::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 LocalClusteringCoefficientDistribution::LocalClusteringCoefficientDistribution() : EigenDescriptor("LocalClustCoefDist", "Variance of local clustering coefficients") {}
 std::variant<double, int, std::string> LocalClusteringCoefficientDistribution::calculate(const Molecule& mol) const {
@@ -1513,7 +1519,9 @@ std::variant<double, int, std::string> GraphBipartivityIndex::calculate(const Mo
 }
 
 SpanningTreeEntropy::SpanningTreeEntropy() : EigenDescriptor("SpanTreeEntropy", "Spanning tree entropy (Requires Laplacian eigenvalues)") {}
-std::variant<double, int, std::string> SpanningTreeEntropy::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> SpanningTreeEntropy::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 // --- Implementations for newly added descriptor classes ---
 
@@ -2065,7 +2073,9 @@ std::variant<double, int, std::string> SignLapDomEigVecVar::calculate(const Mole
 
 // Miscellaneous Eigen-based
 SumFormanRicci::SumFormanRicci() : EigenDescriptor("SumFormanRicci", "Sum of Forman-Ricci curvatures (Approximate)") {}
-std::variant<double, int, std::string> SumFormanRicci::calculate(const Molecule& mol) const { return "Not Implemented"; }
+std::variant<double, int, std::string> SumFormanRicci::calculate([[maybe_unused]] const Molecule& mol) const { 
+    return "Not Implemented"; 
+}
 
 LogDetLaplacian::LogDetLaplacian() : EigenDescriptor("LogDetLaplacian", "Log of pseudo-determinant of Laplacian") {}
 std::variant<double, int, std::string> LogDetLaplacian::calculate(const Molecule& mol) const {
@@ -2188,7 +2198,6 @@ std::variant<double, int, std::string> VarianceDegreeDistance::calculate(const M
 
      return computeVariance(deg_dists_eigen);
 }
-
 
 } // namespace descriptors
 } // namespace desfact
