@@ -1,9 +1,13 @@
-// ... existing code ...
 #pragma once
 
 #include "descriptors.hpp"
 #include <string>
 #include <variant>
+#include <GraphMol/ROMol.h>
+
+namespace RDKit {
+    class ROMol;
+}
 
 namespace desfact {
 namespace descriptors {
@@ -192,6 +196,206 @@ class BridgeheadAtomCount : public Descriptor {
 public:
     BridgeheadAtomCount();
     std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class PhosphorusCount : public Descriptor {
+public:
+    PhosphorusCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class SiliconCount : public Descriptor {
+public:
+    SiliconCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class BoronCount : public Descriptor {
+public:
+    BoronCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class MetalAtomCount : public Descriptor {
+public:
+    MetalAtomCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class NonMetalAtomCount : public Descriptor {
+public:
+    NonMetalAtomCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class NumSpAtoms : public Descriptor {
+public:
+    NumSpAtoms();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class NumSp2Atoms : public Descriptor {
+public:
+    NumSp2Atoms();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class NumSp3Atoms : public Descriptor {
+public:
+    NumSp3Atoms();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class RingCount3 : public Descriptor {
+public:
+    RingCount3();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class RingCount4 : public Descriptor {
+public:
+    RingCount4();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class RingCount5 : public Descriptor {
+public:
+    RingCount5();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class RingCount6 : public Descriptor {
+public:
+    RingCount6();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class RingCountLarge : public Descriptor {
+public:
+    RingCountLarge();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class FusedBondCount : public Descriptor {
+public:
+    FusedBondCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class SpiroAtomCount : public Descriptor {
+public:
+    SpiroAtomCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class MacrocycleRingCount : public Descriptor {
+public:
+    MacrocycleRingCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class CNBondCount : public Descriptor {
+public:
+    CNBondCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class COBondCount : public Descriptor {
+public:
+    COBondCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class CSBondCount : public Descriptor {
+public:
+    CSBondCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class CHaloBondCount : public Descriptor {
+public:
+    CHaloBondCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+};
+
+class AlcoholGroupCount : public Descriptor {
+public:
+    AlcoholGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* alcoholSmarts;
+};
+
+class EtherGroupCount : public Descriptor {
+public:
+    EtherGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* etherSmarts;
+};
+
+class AmineCount : public Descriptor {
+public:
+    AmineCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* amineSmarts;
+};
+
+class EsterGroupCount : public Descriptor {
+public:
+    EsterGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* esterSmarts;
+};
+
+class KetoneGroupCount : public Descriptor {
+public:
+    KetoneGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* ketoneSmarts;
+};
+
+class AldehydeGroupCount : public Descriptor {
+public:
+    AldehydeGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* aldehydeSmarts;
+};
+
+class NitroGroupCount : public Descriptor {
+public:
+    NitroGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* nitroSmarts;
+};
+
+class SulfonylGroupCount : public Descriptor {
+public:
+    SulfonylGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* sulfonylSmarts;
+};
+
+class CyanoGroupCount : public Descriptor {
+public:
+    CyanoGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* cyanoSmarts;
+};
+
+class PhenylGroupCount : public Descriptor {
+public:
+    PhenylGroupCount();
+    std::variant<double, int, std::string> calculate(const ::desfact::Molecule& mol) const override;
+private:
+    static RDKit::ROMol* phenylSmarts;
 };
 
 } // namespace descriptors

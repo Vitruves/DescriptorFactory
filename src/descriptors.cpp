@@ -16,6 +16,7 @@
 #include "descriptors/solubility.hpp"
 #include "descriptors/counts.hpp"
 #include "descriptors/image.hpp"
+#include "descriptors/rdkit.hpp"
 #include <GraphMol/Descriptors/MolDescriptors.h>
 #include <GraphMol/GraphMol.h>
 #include <GraphMol/MolOps.h>
@@ -644,8 +645,8 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::SignlessLaplacianEigenvalueVariance>());
     registerDescriptor(std::make_unique<descriptors::SignlessLaplacianEigenvalueSkewness>());
     registerDescriptor(std::make_unique<descriptors::WeightedAdjacencySpectralRadius>());
-    registerDescriptor(std::make_unique<descriptors::MeanFirstPassageTime>());
-    registerDescriptor(std::make_unique<descriptors::CommuteTimeDistance>());
+    //registerDescriptor(std::make_unique<descriptors::MeanFirstPassageTime>());
+    //registerDescriptor(std::make_unique<descriptors::CommuteTimeDistance>());
     registerDescriptor(std::make_unique<descriptors::KirchhoffIndexVariance>());
     registerDescriptor(std::make_unique<descriptors::EffectiveGraphResistanceDistribution>());
     registerDescriptor(std::make_unique<descriptors::LocalClusteringCoefficientDistribution>());
@@ -717,7 +718,7 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::MeanDistanceAromaticSystems>());
     registerDescriptor(std::make_unique<descriptors::LengthLargestFullyConjugatedRingSystem>());
     registerDescriptor(std::make_unique<descriptors::RatioConjugatedCarbonsTotalCarbons>());
-    registerDescriptor(std::make_unique<descriptors::NormalizedConjugationPathwayDensity>());
+    //registerDescriptor(std::make_unique<descriptors::NormalizedConjugationPathwayDensity>());
     registerDescriptor(std::make_unique<descriptors::EstimatedMolecularAspectRatio>());
     registerDescriptor(std::make_unique<descriptors::TerminalHeavyAtomDispersion>());
     registerDescriptor(std::make_unique<descriptors::ConnectivityCorePeripheryGradient>());
@@ -743,24 +744,24 @@ DescriptorFactory::DescriptorFactory() {
 
     // SELFIES descriptors
     registerDescriptor(std::make_unique<descriptors::SelfiesTokenCountDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::SelfiesTokenDistributionDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::SelfiesTokenDistributionDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesAverageComplexityDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesBranchingDepthDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesMaxBranchingFanoutDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::SelfiesEmptyBranchesDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::SelfiesEmptyBranchesDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesRingTokenFrequencyDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesTokenEntropyDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesStringLengthDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::SelfiesBranchTokenRatioDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::SelfiesBranchTokenRatioDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesRingTokenRatioDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesBigramCountDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesTrigramCountDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesTokenRepetitionRateDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::SelfiesAromaticTokenRatioDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::SelfiesAromaticTokenRatioDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesChargeTokenRatioDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesAliphaticChainLengthDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesHeteroatomRatioDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::SelfiesMaxRingSizeDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::SelfiesMaxRingSizeDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesStereoTokenRatioDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesGrammarDepthComplexityDescriptor>());
     registerDescriptor(std::make_unique<descriptors::SelfiesVocabularyDiversityDescriptor>());
@@ -824,7 +825,7 @@ DescriptorFactory::DescriptorFactory() {
 
 
     // *** Register New pKa Descriptors ***
-    registerDescriptor(std::make_unique<descriptors::AcidityTypeDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::AcidityTypeDescriptor>());
     registerDescriptor(std::make_unique<descriptors::PkaEstimate1Descriptor>());
     registerDescriptor(std::make_unique<descriptors::PkaEstimate2Descriptor>());
     registerDescriptor(std::make_unique<descriptors::IsAcidDescriptor>());
@@ -858,7 +859,7 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::MorganFragmentConnectivityPatternDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MorganBitOccurrenceFrequencySkewnessDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MorganSubstructureHeterogeneityIndexDescriptor>());
-    registerDescriptor(std::make_unique<descriptors::MorganBitPolarityDistributionDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::MorganBitPolarityDistributionDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MorganFragmentSimilarityNetworkDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MorganBitPositionInformationGainDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MorganSubstructureDiversityGradientDescriptor>());
@@ -926,7 +927,7 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<desfact::descriptors::HeteroatomCount>());
     registerDescriptor(std::make_unique<desfact::descriptors::RingAtomCount>());
     registerDescriptor(std::make_unique<desfact::descriptors::RingCount>());
-    registerDescriptor(std::make_unique<desfact::descriptors::ChiralCenterCount>());
+    //registerDescriptor(std::make_unique<desfact::descriptors::ChiralCenterCount>());
     registerDescriptor(std::make_unique<desfact::descriptors::FormalChargeCount>());
     registerDescriptor(std::make_unique<desfact::descriptors::PositiveChargeCount>());
     registerDescriptor(std::make_unique<desfact::descriptors::NegativeChargeCount>());
@@ -1056,6 +1057,104 @@ DescriptorFactory::DescriptorFactory() {
     registerDescriptor(std::make_unique<descriptors::MinAtomDegreeDescriptor>());
     registerDescriptor(std::make_unique<descriptors::MeanDistToCentroidDescriptor>());
     registerDescriptor(std::make_unique<descriptors::StdDistToCentroidDescriptor>());
+
+
+    // RDKit descriptors
+    registerDescriptor(std::make_unique<descriptors::RDKitMWDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitTPSADescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitLogPDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitMRDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitLipinskiHBADescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitLipinskiHBDDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumRotatableBondsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumHBondAcceptorsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumHBondDonorsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumHeavyAtomsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumRingsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumAromaticRingsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitNumAliphaticRingsDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitFractionCsp3Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitChiralCentersDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitLabuteASADescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitHallKierAlphaDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitKappaDescriptor1>());
+    registerDescriptor(std::make_unique<descriptors::RDKitKappaDescriptor2>());
+    registerDescriptor(std::make_unique<descriptors::RDKitKappaDescriptor3>());
+
+    // Register the new RDKit descriptors
+    registerDescriptor(std::make_unique<descriptors::RDKitChi0vDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitChi1vDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitChi2vDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitChi3vDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitChi4vDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitMurckoScaffoldCountDescriptor>());
+    //registerDescriptor(std::make_unique<descriptors::RDKitRingCount5Descriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitSpiroAtomCountDescriptor>());
+    registerDescriptor(std::make_unique<descriptors::RDKitBridgeheadAtomCountDescriptor>());
+
+    // --- Register NEW Count Descriptors ---
+    registerDescriptor(std::make_unique<desfact::descriptors::PhosphorusCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::SiliconCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::BoronCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::MetalAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NonMetalAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NumSpAtoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NumSp2Atoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NumSp3Atoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCount3>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCount4>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCount5>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCount6>());
+    registerDescriptor(std::make_unique<desfact::descriptors::RingCountLarge>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FusedBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::SpiroAtomCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::MacrocycleRingCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::CNBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::COBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::CSBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::CHaloBondCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AlcoholGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::EtherGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AmineCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::EsterGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::KetoneGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::AldehydeGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::NitroGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::SulfonylGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::CyanoGroupCount>());
+    registerDescriptor(std::make_unique<desfact::descriptors::PhenylGroupCount>());
+
+    // --- Register NEW Fractional Descriptors ---
+    registerDescriptor(std::make_unique<desfact::descriptors::FcAtomMassAboveAvg>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcAtomMassBelowAvg>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcHighIE>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcLowIE>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcMediumPolz>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcNearZeroEA>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcValence1>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcValence2>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcValence3>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcValence4>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcValence5Plus>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcDegree1>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcDegree2>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcDegree3>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcDegree4>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcSingleBonds>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcDoubleBonds>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcTripleBonds>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcAromaticBonds>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcBondPolarityHigh>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcBondPolarityMedium>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcBondPolarityLow>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcBondHighLowPolz>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcBondHighLowIE>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcPotentialChiralAtoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcSpecifiedChiralAtoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcSpiroAtoms>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcCNBondFraction>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcCOBondFraction>());
+    registerDescriptor(std::make_unique<desfact::descriptors::FcCSBondFraction>());
 
 
     globalLogger.info("Initialized descriptor factory with " +

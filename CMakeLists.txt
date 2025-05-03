@@ -246,38 +246,39 @@ link_directories(
     ${RDKIT_LIBRARY_DIR}
 )
 
-# Library source list
-set(LIB_SOURCES
+# Updated source list
+set(SOURCES
     src/utils.cpp
     src/io.cpp
     src/descriptors.cpp
     src/descriptors/fractional.cpp
     src/descriptors/sum.cpp
     src/descriptors/strings.cpp
+    src/descriptors/rdkit.cpp
+    src/descriptors/electronic.cpp
+    src/descriptors/eigen.cpp
     src/descriptors/vague3.cpp
     src/descriptors/vague4.cpp
-    src/descriptors/electronic.cpp
     src/descriptors/vague5.cpp
     src/descriptors/vague6.cpp
     src/descriptors/vague7.cpp
-    src/descriptors/selfies.cpp
-    src/descriptors/pka.cpp
     src/descriptors/vague8.cpp
-    src/descriptors/morgan.cpp
-    src/descriptors/eigen.cpp
-    src/descriptors/solubility.cpp
-    src/descriptors/counts.cpp
     src/descriptors/image.cpp
+    src/descriptors/pka.cpp
+    src/descriptors/solubility.cpp
+    src/descriptors/selfies.cpp
+    src/descriptors/morgan.cpp
+    src/descriptors/counts.cpp
 )
 
 if(WITH_CUDA)
     set(CUDA_SOURCES src/cuda/descriptors_cuda.cu)
     set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -O3 -arch=sm_60)
-    list(APPEND LIB_SOURCES ${CUDA_SOURCES})
+    list(APPEND SOURCES ${CUDA_SOURCES})
 endif()
 
 # Shared library
-add_library(desfact SHARED ${LIB_SOURCES})
+add_library(desfact SHARED ${SOURCES})
 target_link_libraries(desfact
     ${RDKIT_LIBRARIES}
 )

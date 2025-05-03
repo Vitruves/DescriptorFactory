@@ -294,13 +294,6 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// Ionization Energy
-// class FcLowIEDescriptor : public FractionalDescriptor {
-// public:
-//     FcLowIEDescriptor() : FractionalDescriptor("FcLowIE", "Fraction of atoms with ionization energy < 7 eV") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
-
 // Electron Affinity
 class FcHighEADescriptor : public FractionalDescriptor {
 public:
@@ -326,13 +319,6 @@ public:
     FcLargeVdWDescriptor() : FractionalDescriptor("FcLargeVdW", "Fraction of atoms with VdW volume > 25 Å³") {}
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
-
-// Electronegativity Contribution
-// class FcENMWDescriptor : public FractionalDescriptor {
-// public:
-//     FcENMWDescriptor() : FractionalDescriptor("FcENMW", "Sum(atom electronegativity × atomic MW) / total MW") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
 
 class FcENBondedDescriptor : public FractionalDescriptor {
 public:
@@ -399,12 +385,6 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// class FcOxStateOddDescriptor : public FractionalDescriptor {
-// public:
-//     FcOxStateOddDescriptor() : FractionalDescriptor("FcOxStateOdd", "Atoms with odd ox state / total atoms") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
-
 class FcIEOddDescriptor : public FractionalDescriptor {
 public:
     FcIEOddDescriptor() : FractionalDescriptor("FcIEOdd", "Atoms with odd IE / total atoms") {}
@@ -459,12 +439,6 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// class FcRadiusMWRatioAbove1Descriptor : public FractionalDescriptor {
-// public:
-//     FcRadiusMWRatioAbove1Descriptor() : FractionalDescriptor("FcRadiusMWRatioAbove1", "Atoms where radius/MW > 1 / total atoms") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
-
 class FcENMWAbove2Descriptor : public FractionalDescriptor {
 public:
     FcENMWAbove2Descriptor() : FractionalDescriptor("FcENMWAbove2", "Atoms with EN × MW > 2 / total atoms") {}
@@ -489,12 +463,6 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// class FcLowRadicalENDescriptor : public FractionalDescriptor {
-// public:
-//     FcLowRadicalENDescriptor() : FractionalDescriptor("FcLowRadicalEN", "Radical atoms with EN < 2 / total radical atoms") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
-
 class FcHeavyFormalChargeDescriptor : public FractionalDescriptor {
 public:
     FcHeavyFormalChargeDescriptor() : FractionalDescriptor("FcHeavyFormalCharge", "Heavy atoms with non-zero formal charge / heavy atom count") {}
@@ -513,15 +481,189 @@ public:
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 
-// class FcGroup17OxAbove1Descriptor : public FractionalDescriptor {
-// public:
-//     FcGroup17OxAbove1Descriptor() : FractionalDescriptor("FcGroup17OxAbove1", "Group 17 atoms with ox state > 1 / total group 17 atoms") {}
-//     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
-// };
-
 class FcENAboveMoleculeAvgDescriptor : public FractionalDescriptor {
 public:
     FcENAboveMoleculeAvgDescriptor() : FractionalDescriptor("FcENAboveMoleculeAvg", "Atoms with EN > molecular average / total atoms") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcAtomMassAboveAvg : public FractionalDescriptor {
+public:
+    FcAtomMassAboveAvg() : FractionalDescriptor("FcAtomMassAboveAvg", "Fraction of atoms with mass > molecule average") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcAtomMassBelowAvg : public FractionalDescriptor {
+public:
+    FcAtomMassBelowAvg() : FractionalDescriptor("FcAtomMassBelowAvg", "Fraction of atoms with mass < molecule average") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcHighIE : public FractionalDescriptor {
+public:
+    FcHighIE() : FractionalDescriptor("FcHighIE", "Fraction of atoms with Ionization Energy > 13 eV") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcLowIE : public FractionalDescriptor {
+public:
+    FcLowIE() : FractionalDescriptor("FcLowIE", "Fraction of atoms with Ionization Energy < 9 eV") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcMediumPolz : public FractionalDescriptor {
+public:
+    FcMediumPolz() : FractionalDescriptor("FcMediumPolz", "Fraction of atoms with Polarizability 1.0-3.0 A^3") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcNearZeroEA : public FractionalDescriptor {
+public:
+    FcNearZeroEA() : FractionalDescriptor("FcNearZeroEA", "Fraction of atoms with Electron Affinity -0.5 to 0.5 eV") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcValence1 : public FractionalDescriptor {
+public:
+    FcValence1() : FractionalDescriptor("FcValence1", "Fraction of atoms with total valence = 1") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcValence2 : public FractionalDescriptor {
+public:
+    FcValence2() : FractionalDescriptor("FcValence2", "Fraction of atoms with total valence = 2") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcValence3 : public FractionalDescriptor {
+public:
+    FcValence3() : FractionalDescriptor("FcValence3", "Fraction of atoms with total valence = 3") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcValence4 : public FractionalDescriptor {
+public:
+    FcValence4() : FractionalDescriptor("FcValence4", "Fraction of atoms with total valence = 4") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcValence5Plus : public FractionalDescriptor {
+public:
+    FcValence5Plus() : FractionalDescriptor("FcValence5Plus", "Fraction of atoms with total valence >= 5") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcDegree1 : public FractionalDescriptor {
+public:
+    FcDegree1() : FractionalDescriptor("FcDegree1", "Fraction of atoms with degree = 1") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcDegree2 : public FractionalDescriptor {
+public:
+    FcDegree2() : FractionalDescriptor("FcDegree2", "Fraction of atoms with degree = 2") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcDegree3 : public FractionalDescriptor {
+public:
+    FcDegree3() : FractionalDescriptor("FcDegree3", "Fraction of atoms with degree = 3") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcDegree4 : public FractionalDescriptor {
+public:
+    FcDegree4() : FractionalDescriptor("FcDegree4", "Fraction of atoms with degree = 4") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcSingleBonds : public FractionalDescriptor {
+public:
+    FcSingleBonds() : FractionalDescriptor("FcSingleBonds", "Fraction of bonds that are single") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcDoubleBonds : public FractionalDescriptor {
+public:
+    FcDoubleBonds() : FractionalDescriptor("FcDoubleBonds", "Fraction of bonds that are double") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcTripleBonds : public FractionalDescriptor {
+public:
+    FcTripleBonds() : FractionalDescriptor("FcTripleBonds", "Fraction of bonds that are triple") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcAromaticBonds : public FractionalDescriptor {
+public:
+    FcAromaticBonds() : FractionalDescriptor("FcAromaticBonds", "Fraction of bonds that are aromatic") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcBondPolarityHigh : public FractionalDescriptor {
+public:
+    FcBondPolarityHigh() : FractionalDescriptor("FcBondPolarityHigh", "Fraction of bonds with EN difference > 1.0") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcBondPolarityMedium : public FractionalDescriptor {
+public:
+    FcBondPolarityMedium() : FractionalDescriptor("FcBondPolarityMedium", "Fraction of bonds with EN difference 0.5-1.0") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcBondPolarityLow : public FractionalDescriptor {
+public:
+    FcBondPolarityLow() : FractionalDescriptor("FcBondPolarityLow", "Fraction of bonds with EN difference < 0.5") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcBondHighLowPolz : public FractionalDescriptor {
+public:
+    FcBondHighLowPolz() : FractionalDescriptor("FcBondHighLowPolz", "Fraction bonds High Polz (>3.5) to Low Polz (<1.0)") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcBondHighLowIE : public FractionalDescriptor {
+public:
+    FcBondHighLowIE() : FractionalDescriptor("FcBondHighLowIE", "Fraction bonds High IE (>13) to Low IE (<9)") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcPotentialChiralAtoms : public FractionalDescriptor {
+public:
+    FcPotentialChiralAtoms() : FractionalDescriptor("FcPotentialChiralAtoms", "Fraction of atoms that are potential chiral centers") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcSpecifiedChiralAtoms : public FractionalDescriptor {
+public:
+    FcSpecifiedChiralAtoms() : FractionalDescriptor("FcSpecifiedChiralAtoms", "Fraction of atoms that are specified chiral centers") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcSpiroAtoms : public FractionalDescriptor {
+public:
+    FcSpiroAtoms() : FractionalDescriptor("FcSpiroAtoms", "Fraction of atoms that are spiro atoms") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcCNBondFraction : public FractionalDescriptor {
+public:
+    FcCNBondFraction() : FractionalDescriptor("FcCNBondFraction", "Fraction of bonds that are C-N") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcCOBondFraction : public FractionalDescriptor {
+public:
+    FcCOBondFraction() : FractionalDescriptor("FcCOBondFraction", "Fraction of bonds that are C-O") {}
+    std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
+};
+
+class FcCSBondFraction : public FractionalDescriptor {
+public:
+    FcCSBondFraction() : FractionalDescriptor("FcCSBondFraction", "Fraction of bonds that are C-S") {}
     std::variant<double, int, std::string> calculate(const Molecule& mol) const override;
 };
 

@@ -12,6 +12,7 @@
 #include <thread> 
 #include <random>
 #include <utility>
+#include <unordered_set>
 #include <sys/ioctl.h> // For terminal width detection
 #include <unistd.h>    // For STDOUT_FILENO
 #include "utils.hpp"
@@ -241,7 +242,7 @@ int main(int argc, char* argv[]) {
         ("i,input", "Input CSV file path", cxxopts::value<std::string>())
         ("o,output", "Output CSV file path", cxxopts::value<std::string>())
         ("s,smiles", "Direct SMILES string input (alternative to input file)", cxxopts::value<std::string>())
-        ("d,descriptors", "Comma-separated list of descriptors to calculate, or 'all'", cxxopts::value<std::string>());
+        ("d,descriptors", "Comma-separated list of descriptors to calculate, or 'all'/'fast'/'no-rdkit' ('fast' excludes eigen, image, and morgan descriptors, 'no-rdkit' excludes RDKit-specific descriptors)", cxxopts::value<std::string>()->default_value("all"));
     
     options.add_options("CSV")
         ("sc,smiles-col", "Name/index of the column containing SMILES", cxxopts::value<std::string>()->default_value("SMILES"))
@@ -398,9 +399,64 @@ int main(int argc, char* argv[]) {
         // Process descriptor list
         std::string descriptorsStr = result["descriptors"].as<std::string>();
         std::vector<std::string> descriptorNames;
-        if (descriptorsStr == "all") {
+
+        // Convert descriptorsStr to lowercase for case-insensitive comparison
+        std::string descriptorsStrLower = descriptorsStr;
+        std::transform(descriptorsStrLower.begin(), descriptorsStrLower.end(), descriptorsStrLower.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+
+        if (descriptorsStrLower == "all") {
             descriptorNames = factory.getAvailableDescriptors();
             globalLogger.info("Using all " + std::to_string(descriptorNames.size()) + " available descriptors.");
+        } else if (descriptorsStrLower == "fast") {
+            // Get all available descriptors first
+            std::vector<std::string> allDescriptors = factory.getAvailableDescriptors();
+            
+            // Create sets of descriptors to exclude from eigen.cpp, image.cpp, and morgan.cpp
+            std::unordered_set<std::string> excludeDescriptors = {
+                // Morgan descriptors
+                "MorganBitDensityRatio", "MorganFragUniqueness", "MorganRadiusInfoRatio", "MorganBitClustering", "MorganFragEntropy", "MorganFPAsymmetry", "MorganBitTransitionRate", "MorganFragSizeSkew", "MorganLCSScore", "MorganPharmacophoreDensity", "MorganFragDiversity", "MorganBitCorrelation", "MorganPatternRecurrence", "MorganSimilarityToRef", "MorganFragComplexity", "MorganInfoDensity", "MorganEnvVariability", "MorganBitImportance", "MorganRingSysScore", "MorganBitProbEntropy", "MorganFragENSpectrum", "MorganBitCorrMatrix", "MorganFragConnectivity", "MorganBitFreqSkew", "MorganSubstructHeterogeneity", "MorganBitPolarityDist", "MorganFragSimNetwork", "MorganBitInfoGain", "MorganSubstructDivGradient", "MorganFPSymmetry",
+                
+                // Image descriptors
+                "BoundingBoxArea", "MoleculeWidth", "MoleculeHeight", "AspectRatio", "AtomDensity", "MeanAtomRadius", "MaxAtomRadius", "MinAtomRadius", "MeanBondLength", "MaxBondLength", "MinBondLength", "BondLengthStd", "MeanAtomAtomDist", "MeanAtomLuminance", "MaxAtomAtomDist", "MinAtomAtomDist", "MeanAtomArea", "MedianAtomRadius", "MedianBondLength", "AtomRadiusRange", "AtomAreaFraction", "BondCoverageFraction", "AtomPackingDensity", "AtomMassX", "AtomMassY", "AtomMassDist", "AtomRadiusStd", "MeanBondAngle", "BondAngleStd", "AtomXStd", "AtomYStd", "AtomLuminanceStd", "BondLenMAD", "AtomRadiusMAD", "AtomAreaStd", "AtomRadiusCV", "AtomAreaCV", "AtomLuminanceCV", "AtomAreaRange", "AtomAreaMedian", "AtomAreaMAD", "AtomAreaHullFrac", "AtomAreaCenterFrac", "StdAllAtomDist", "MinBondAngle", "MaxBondAngle", "MedianBondAngle", "MeanBondColorDiff", "MeanBondLuminanceDiff", "MeanBondLenDiffColor", "MeanBondAngleDiffColor", "MeanDistSameColor", "MeanDistDiffColor", "MeanBondOrder", "FracDoubleBonds", "FracTripleBonds", "FracAromaticBonds", "MeanAtomDegree", "MaxAtomDegree", "MinAtomDegree", "MeanDistToCentroid", "StdDistToCentroid", "MeanLenSingle", "MeanLenDouble", "MeanLenTriple", "MeanLenAromatic", "FracDeg1", "FracDeg2", "FracDeg3", "FracDeg4", "MeanBondRadiiDiff", "MeanBondLuminanceDiff2", "MeanAngleHighDegree", "BoundaryAtomRatio", "MeanAtomEccentricity", "MolecularDiameter", "MolecularRadius", "RadiusOfGyration", "MolecularSphericity", "BondLenToAtomRadiusRatio", "EdgeDensity", "PlanarityMeasure", "MeanNearestNeighborDist", "MeanAtomsInRadius", "VarNearestNeighborDist", "MeanBondToBondAngle", "MomentOfInertia", "MeanAtomCentrality", "TerminalAtomCount", "JunctionAtomCount", "TerminalToJunctionRatio", "WienerIndex", "RingCount", "AcidicCenterCount", "BasicCenterCount", "AcidicToBasicRatio", "MeanAcidicAcidicDist", "MeanBasicBasicDist", "MeanAcidicBasicDist", "MinAcidicBasicDist", "MeanAtomsNearAcidic", "MeanAtomsNearBasic", "MeanAcidicRadius", "MeanBasicRadius", "MeanAcidicCentroidDist", "MeanBasicCentroidDist", "FracAcidicOnHull", "FracBasicOnHull", "MeanAcidicAngle", "MeanBasicAngle", "MeanAcidicLuminance", "MeanBasicLuminance", "AcidicBasicLuminanceDiff", "FractalDimension", "ForegroundRatio", "AverageColor", "ColorVariance", "ImageCenterX", "ImageCenterY", "ImageOrientation",
+                
+                // Eigen descriptors
+                "AdjNonZero", "AdjTrace", "AdjFrobNorm", "AdjSpecRad", "AdjMinEig", "AdjEigSum", "AdjEigSumSq", "AdjEigVar", "AdjEigSkew", "AdjEigKurt", "AdjPosEig", "AdjNegEig", "AdjZeroEig", "AdjMaxDeg", "AdjMinDeg", "AdjMeanDeg", "AdjDegVar", "AdjDegStd", "AdjRank", "GraphEnergy", "LapSpecRad", "LapAlgConn", "LapZeroEig", "LapEnergy", "LapTrace", "LapDet", "LapTotEffRes", "LapKirchhoff", "LapEigVar", "LapEigSkew", "NormLapSpecRad", "NormLapMinNonZero", "NormLapMaxEig", "NormLapEnergy", "NormLapTrace", "DegMatMaxDeg", "DegMatMinDeg", "DegMatAvgDeg", "DegMatVar", "DegMatSkew", "DegMatEnt", "GraphIrreg", "WienerIdx", "EstradaIdx", "NumSpanTrees", "GraphEcc", "SpecGap", "TraceMatPow2", "NumTriangles", "GraphDiam", "Num2Walks", "Num3Walks", "Num4Walks", "MeanClosed3Walks", "MeanClosed4Walks", "Walk2Energy", "Walk3Energy", "Walk4Energy", "GraphIrregWalk", "TriPathRatio", "MaxSingVal", "MinNonZeroSingVal", "CondNumber", "SumSingVal", "FrobNormSingVal", "SingValEntropy", "SingValVar", "SingValSkew", "SpecEffRank", "NuclearNorm", "NormAdjSpecRad", "NormEigGap", "SumNormEig", "VarNormEig", "CountNormEigAboveHalf", "NormEnergy", "MaxNormEigCent", "AvgNormEigCent", "NormAdjRank", "NormAdjEntropy", "SignLapSpecRad", "SignLapMinEig", "SignLapEnergy", "SignLapTrace", "SignLapDet", "SignLapZeroEig", "SignLapPosEig", "SignLapNegEig", "SignLapEigVar", "SignLapEigSkew", "WtAdjSpecRad", "MeanFirstPassage", "CommuteTime", "KirchhoffVar", "EffGraphResDist", "LocalClustCoefDist", "GraphRobustIdx", "NormEstradaIdx", "GraphBipart", "SpanTreeEntropy", "DistMatSpecRad", "DistMatMinEig", "DistMatEigSum", "DistMatEigVar", "DistMatEigSkew", "DistMatEigKurt", "DistMatEnergy", "DistMatFrobNorm", "DistMatRank", "DistMatDet", "DistMatConditionNumber", "DistMatSingValEntropy", "DistMatSpectralEffRank", "WtNumAdjSpecRad", "WtNumAdjMinEig", "WtNumAdjEigSum", "WtNumAdjEigVar", "WtNumAdjEnergy", "WtNumLapSpecRad", "WtNumLapAlgConn", "WtNumLapEigSum", "WtNumLapEigVar", "WtNumLapEnergy", "AdjPow2SpecRad", "AdjPow2Energy", "AdjPow3SpecRad", "AdjPow3Energy", "AdjPow4SpecRad", "AdjPow4Energy", "LapPow2SpecRad", "LapPow2AlgConn", "LapPow2Energy", "LapPow2Trace", "DistMatEstradaIdx", "WtNumAdjEstradaIdx", "WtNumLapEstradaIdx", "AdjDomEigVecVar", "AdjDomEigVecSkew", "AdjDomEigVecKurt", "NormLapDomEigVecVar", "SignLapDomEigVecVar", "SumFormanRicci", "LogDetLaplacian", "AvgDegreeDistance", "VarianceDegreeDistance"
+            };
+            
+            // Filter out excluded descriptors
+            for (const auto& descriptor : allDescriptors) {
+                if (excludeDescriptors.find(descriptor) == excludeDescriptors.end()) {
+                    descriptorNames.push_back(descriptor);
+                }
+            }
+            
+            globalLogger.info("Using 'fast' mode with " + std::to_string(descriptorNames.size()) + 
+                              " descriptors (excluding eigen, image, and morgan descriptors).");
+        } else if (descriptorsStrLower == "no-rdkit") {
+            // Get all available descriptors first
+            std::vector<std::string> allDescriptors = factory.getAvailableDescriptors();
+            
+            // Create set of RDKit descriptors to exclude
+            std::unordered_set<std::string> rdkitDescriptors = {
+                "rdkitMW", "rdkitTPSA", "rdkitLogP", "rdkitMR", "rdkitLipinskiHBA", "rdkitLipinskiHBD",
+                "rdkitRotatableBonds", "rdkitHBondAcceptors", "rdkitHBondDonors", "rdkitHeavyAtoms",
+                "rdkitNumRings", "rdkitAromaticRings", "rdkitAliphaticRings", "rdkitFractionCsp3",
+                "rdkitChiralCenters", "rdkitLabuteASA", "rdkitHallKierAlpha", "rdkitKappa1", 
+                "rdkitKappa2", "rdkitKappa3", "rdkitChi0v", "rdkitChi1v", "rdkitChi2v", 
+                "rdkitChi3v", "rdkitChi4v", "rdkitMurckoCount", "rdkitRingCount5", 
+                "rdkitSpiroAtomCount", "rdkitBridgeheadAtomCount"
+            };
+            
+            // Filter out RDKit descriptors
+            for (const auto& descriptor : allDescriptors) {
+                if (rdkitDescriptors.find(descriptor) == rdkitDescriptors.end()) {
+                    descriptorNames.push_back(descriptor);
+                }
+            }
+            
+            globalLogger.info("Using 'no-rdkit' mode with " + std::to_string(descriptorNames.size()) + 
+                             " descriptors (excluding RDKit-specific descriptors).");
         } else {
             std::stringstream ss(descriptorsStr);
             std::string item;

@@ -1,4 +1,5 @@
 #include "descriptors/fractional.hpp"
+#include "descriptors/element_properties.hpp"
 #include <GraphMol/GraphMol.h>
 #include <GraphMol/MolOps.h>
 #include <GraphMol/Atom.h>
@@ -9,145 +10,65 @@
 #include <GraphMol/Descriptors/Crippen.h>
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <GraphMol/PeriodicTable.h>
-#include <unordered_map> // Keep unordered_map
-#include <unordered_set> // Keep unordered_set
+#include <GraphMol/RingInfo.h> // Needed for ring ops
+#include <GraphMol/Chirality.h> // Needed for chirality
+#include <unordered_map>
+#include <unordered_set>
 
 namespace desfact {
 namespace descriptors {
 
-// Helper tables for element properties
-namespace ElementProperties {
-    // Pauling electronegativity values
-    static const std::unordered_map<int, double> electronegativity = {
-        {1, 2.20},  // H
-        {6, 2.55},  // C
-        {7, 3.04},  // N
-        {8, 3.44},  // O
-        {9, 3.98},  // F
-        {15, 2.19}, // P
-        {16, 2.58}, // S
-        {17, 3.16}, // Cl
-        {35, 2.96}, // Br
-        {53, 2.66}  // I
-    };
-    
-    // Covalent radii in Angstroms
-    static const std::unordered_map<int, double> covalentRadius = {
-        {1, 0.31},  // H
-        {6, 0.76},  // C
-        {7, 0.71},  // N
-        {8, 0.66},  // O
-        {9, 0.57},  // F
-        {15, 1.07}, // P
-        {16, 1.05}, // S
-        {17, 1.02}, // Cl
-        {35, 1.20}, // Br
-        {53, 1.39}  // I
-    };
-    
-    // Atomic polarizability in cubic Angstroms
-    static const std::unordered_map<int, double> atomicPolarizability = {
-        {1, 0.667},  // H
-        {6, 1.76},   // C
-        {7, 1.10},   // N
-        {8, 0.802},  // O
-        {9, 0.557},  // F
-        {15, 3.63},  // P
-        {16, 2.90},  // S
-        {17, 2.18},  // Cl
-        {35, 3.05},  // Br
-        {53, 5.35}   // I
-    };
-    
-    // Ionization energy in eV
-    static const std::unordered_map<int, double> ionizationEnergy = {
-        {1, 13.6},  // H
-        {6, 11.3},  // C
-        {7, 14.5},  // N
-        {8, 13.6},  // O
-        {9, 17.4},  // F
-        {15, 10.5}, // P
-        {16, 10.4}, // S
-        {17, 13.0}, // Cl
-        {35, 11.8}, // Br
-        {53, 10.5}  // I
-    };
-    
-    // Electron affinity in eV
-    static const std::unordered_map<int, double> electronAffinity = {
-        {1, 0.75},  // H
-        {6, 1.26},  // C
-        {7, 0.07},  // N
-        {8, 1.46},  // O
-        {9, 3.40},  // F
-        {15, 0.75}, // P
-        {16, 2.08}, // S
-        {17, 3.62}, // Cl
-        {35, 3.36}, // Br
-        {53, 3.06}  // I
-    };
-    
-    // Van der Waals volume in cubic Angstroms
-    static const std::unordered_map<int, double> vanDerWaalsVolume = {
-        {1, 7.2},   // H
-        {6, 20.6},  // C
-        {7, 15.6},  // N
-        {8, 14.0},  // O
-        {9, 13.3},  // F
-        {15, 24.4}, // P
-        {16, 24.4}, // S
-        {17, 22.5}, // Cl
-        {35, 26.5}, // Br
-        {53, 32.9}  // I
-    };
-    
-    // Common oxidation states
-    static const std::unordered_map<int, std::vector<int>> oxidationStates = {
-        {1, {1, -1}},         // H
-        {6, {4, 2, -4}},      // C
-        {7, {5, 3, -3}},      // N
-        {8, {-2}},            // O
-        {9, {-1}},            // F
-        {15, {5, 3, -3}},     // P
-        {16, {6, 4, 2, -2}},  // S
-        {17, {7, 5, 3, 1, -1}}, // Cl
-        {35, {7, 5, 3, 1, -1}}, // Br
-        {53, {7, 5, 3, 1, -1}}  // I
-    };
-    
-    // Metal elements (simplified list)
-    static const std::unordered_set<int> metals = {
-        3, 4, 11, 12, 13, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 
-        37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 
-        55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 
-        72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84,
-        87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103
-    };
-    
-    // Metalloid elements
-    static const std::unordered_set<int> metalloids = {
-        5, 14, 32, 33, 51, 52, 84
-    };
-    
-    // Get element property with default value
-    template<typename T>
-    T getProperty(const std::unordered_map<int, T>& propertyMap, int atomicNum, T defaultValue) {
-        auto it = propertyMap.find(atomicNum);
-        return (it != propertyMap.end()) ? it->second : defaultValue;
-    }
-}
-
 namespace {
     // ... other helper functions ...
+
+    // Function to get the atomic mass of an atom
+    double getAtomMass(const RDKit::Atom* atom) {
+        if (!atom) return 0.0;
+        return RDKit::PeriodicTable::getTable()->getAtomicWeight(atom->getAtomicNum());
+    }
+
+    // Function to get the average atomic mass of a molecule
+    double getMoleculeAverageAtomicMass(const RDKit::ROMol* mol) {
+        if (!mol || mol->getNumAtoms() == 0) return 0.0;
+        double totalMass = 0.0;
+        for (const RDKit::Atom* atom : mol->atoms()) {
+            totalMass += getAtomMass(atom);
+        }
+        return totalMass / mol->getNumAtoms();
+    }
 
     // Function to get the first ionization energy of an atom (in eV)
     double getAtomIonizationEnergy(const RDKit::Atom* atom) {
         if (!atom) return 0.0;
-        return ElementProperties::getProperty(ElementProperties::ionizationEnergy, atom->getAtomicNum(), 0.0);
+        return ElementProperties::getProperty(ElementProperties::ionizationEnergy, atom->getAtomicNum(), 10.0); // Default 10 eV
+    }
+    
+    // Function to get the electron affinity of an atom (in eV)
+    double getAtomElectronAffinity(const RDKit::Atom* atom) {
+        if (!atom) return 0.0;
+        return ElementProperties::getProperty(ElementProperties::electronAffinity, atom->getAtomicNum(), 1.0); // Default 1 eV
     }
 
-    // ... continue with existing code ...
-}
+    // Function to get the covalent radius of an atom (in Angstrom)
+    double getAtomCovalentRadius(const RDKit::Atom* atom) {
+        if (!atom) return 0.0;
+        return ElementProperties::getProperty(ElementProperties::covalentRadius, atom->getAtomicNum(), 1.0); // Default 1 A
+    }
+    
+    // Function to get the Van der Waals radius of an atom (in Angstrom)
+    double getAtomVdWRadius(const RDKit::Atom* atom) {
+        if (!atom) return 0.0;
+        return ElementProperties::getProperty(ElementProperties::vanDerWaalsRadius, atom->getAtomicNum(), 1.6); // Default 1.6 A
+    }
+
+    // Helper to initialize ring info if needed
+    void ensureRingInfo(const RDKit::ROMol& mol) {
+        if (!mol.getRingInfo() || !mol.getRingInfo()->isInitialized()) {
+            RDKit::MolOps::findSSSR(const_cast<RDKit::ROMol&>(mol));
+        }
+    }
+
+} // End anonymous namespace
 
 // FractionalDescriptor static methods
 double FractionalDescriptor::calcAtomicFraction(const Molecule& mol, 
@@ -1531,6 +1452,283 @@ std::variant<double, int, std::string> FcHeavyFormalChargeDescriptor::calculate(
     }
     
     return (heavyCount > 0) ? static_cast<double>(heavyChargedCount) / heavyCount : 0.0;
+}
+
+// --- New Fractional Descriptor Implementations ---
+
+std::variant<double, int, std::string> FcAtomMassAboveAvg::calculate(const Molecule& mol) const {
+    if (!mol.isValid() || !mol.getMolecule()) return 0.0;
+    const RDKit::ROMol* rdkMol = mol.getMolecule().get();
+    if (rdkMol->getNumAtoms() == 0) return 0.0;
+    double avgMass = getMoleculeAverageAtomicMass(rdkMol);
+    return calcAtomicFraction(mol, [avgMass](const RDKit::Atom* atom) {
+        return getAtomMass(atom) > avgMass;
+    });
+}
+
+std::variant<double, int, std::string> FcAtomMassBelowAvg::calculate(const Molecule& mol) const {
+    if (!mol.isValid() || !mol.getMolecule()) return 0.0;
+    const RDKit::ROMol* rdkMol = mol.getMolecule().get();
+    if (rdkMol->getNumAtoms() == 0) return 0.0;
+    double avgMass = getMoleculeAverageAtomicMass(rdkMol);
+    return calcAtomicFraction(mol, [avgMass](const RDKit::Atom* atom) {
+        return getAtomMass(atom) < avgMass;
+    });
+}
+
+std::variant<double, int, std::string> FcHighIE::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return getAtomIonizationEnergy(atom) > 13.0;
+    });
+}
+
+std::variant<double, int, std::string> FcLowIE::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return getAtomIonizationEnergy(atom) < 9.0;
+    });
+}
+
+std::variant<double, int, std::string> FcMediumPolz::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        double polz = getAtomPolarizability(atom);
+        return polz >= 1.0 && polz <= 3.0;
+    });
+}
+
+std::variant<double, int, std::string> FcNearZeroEA::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        double ea = getAtomElectronAffinity(atom);
+        return ea >= -0.5 && ea <= 0.5;
+    });
+}
+
+std::variant<double, int, std::string> FcValence1::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getTotalValence() == 1;
+    });
+}
+
+std::variant<double, int, std::string> FcValence2::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getTotalValence() == 2;
+    });
+}
+
+std::variant<double, int, std::string> FcValence3::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getTotalValence() == 3;
+    });
+}
+
+std::variant<double, int, std::string> FcValence4::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getTotalValence() == 4;
+    });
+}
+
+std::variant<double, int, std::string> FcValence5Plus::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getTotalValence() >= 5;
+    });
+}
+
+std::variant<double, int, std::string> FcDegree1::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getDegree() == 1;
+    });
+}
+
+std::variant<double, int, std::string> FcDegree2::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getDegree() == 2;
+    });
+}
+
+std::variant<double, int, std::string> FcDegree3::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getDegree() == 3;
+    });
+}
+
+std::variant<double, int, std::string> FcDegree4::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        return atom->getDegree() == 4;
+    });
+}
+
+std::variant<double, int, std::string> FcSingleBonds::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        return bond->getBondType() == RDKit::Bond::SINGLE;
+    });
+}
+
+std::variant<double, int, std::string> FcDoubleBonds::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        return bond->getBondType() == RDKit::Bond::DOUBLE;
+    });
+}
+
+std::variant<double, int, std::string> FcTripleBonds::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        return bond->getBondType() == RDKit::Bond::TRIPLE;
+    });
+}
+
+std::variant<double, int, std::string> FcAromaticBonds::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        return bond->getIsAromatic();
+    });
+}
+
+std::variant<double, int, std::string> FcBondPolarityHigh::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        double en1 = getAtomElectronegativity(bond->getBeginAtom());
+        double en2 = getAtomElectronegativity(bond->getEndAtom());
+        return std::abs(en1 - en2) > 1.0;
+    });
+}
+
+std::variant<double, int, std::string> FcBondPolarityMedium::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        double en1 = getAtomElectronegativity(bond->getBeginAtom());
+        double en2 = getAtomElectronegativity(bond->getEndAtom());
+        double diff = std::abs(en1 - en2);
+        return diff >= 0.5 && diff <= 1.0;
+    });
+}
+
+std::variant<double, int, std::string> FcBondPolarityLow::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        double en1 = getAtomElectronegativity(bond->getBeginAtom());
+        double en2 = getAtomElectronegativity(bond->getEndAtom());
+        return std::abs(en1 - en2) < 0.5;
+    });
+}
+
+std::variant<double, int, std::string> FcBondHighLowPolz::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        double polz1 = getAtomPolarizability(bond->getBeginAtom());
+        double polz2 = getAtomPolarizability(bond->getEndAtom());
+        bool high1 = polz1 > 3.5;
+        bool low1 = polz1 < 1.0;
+        bool high2 = polz2 > 3.5;
+        bool low2 = polz2 < 1.0;
+        return (high1 && low2) || (low1 && high2);
+    });
+}
+
+std::variant<double, int, std::string> FcBondHighLowIE::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        double ie1 = getAtomIonizationEnergy(bond->getBeginAtom());
+        double ie2 = getAtomIonizationEnergy(bond->getEndAtom());
+        bool high1 = ie1 > 13.0;
+        bool low1 = ie1 < 9.0;
+        bool high2 = ie2 > 13.0;
+        bool low2 = ie2 < 9.0;
+        return (high1 && low2) || (low1 && high2);
+    });
+}
+
+std::variant<double, int, std::string> FcPotentialChiralAtoms::calculate(const Molecule& mol) const {
+     if (!mol.isValid() || !mol.getMolecule()) return 0.0;
+     // Create a mutable copy
+     RDKit::ROMol molCopy = *mol.getMolecule(); 
+     
+     if (molCopy.getNumAtoms() == 0) return 0.0;
+
+     // Force assignment on the copy
+     RDKit::MolOps::assignStereochemistry(molCopy, true, true, true); 
+     int potentialChiralCount = 0;
+     // Iterate over the copy's atoms
+     for (const RDKit::Atom* atom : molCopy.atoms()) { 
+         if (atom->hasProp(RDKit::common_properties::_ChiralityPossible)) {
+             potentialChiralCount++;
+         }
+     }
+     return static_cast<double>(potentialChiralCount) / molCopy.getNumAtoms();
+}
+
+
+std::variant<double, int, std::string> FcSpecifiedChiralAtoms::calculate(const Molecule& mol) const {
+    return calcAtomicFraction(mol, [](const RDKit::Atom* atom) {
+        RDKit::Atom::ChiralType tag = atom->getChiralTag();
+        return tag != RDKit::Atom::CHI_UNSPECIFIED && tag != RDKit::Atom::CHI_OTHER;
+    });
+}
+
+std::variant<double, int, std::string> FcSpiroAtoms::calculate(const Molecule& mol) const {
+    if (!mol.isValid() || !mol.getMolecule()) return 0.0;
+    const RDKit::ROMol* rdkMol = mol.getMolecule().get();
+    if (rdkMol->getNumAtoms() == 0) return 0.0;
+    ensureRingInfo(*rdkMol);
+    const auto* ringInfo = rdkMol->getRingInfo();
+    int spiroCount = 0;
+
+    // Reuse logic from SpiroAtomCount descriptor in counts.cpp
+     for(const auto& atom : rdkMol->atoms()){
+         if(ringInfo->isAtomInRingOfSize(atom->getIdx(), 3) ||
+            ringInfo->isAtomInRingOfSize(atom->getIdx(), 4) ||
+            ringInfo->isAtomInRingOfSize(atom->getIdx(), 5) ||
+            ringInfo->isAtomInRingOfSize(atom->getIdx(), 6) ||
+            ringInfo->isAtomInRingOfSize(atom->getIdx(), 7) ||
+            ringInfo->isAtomInRingOfSize(atom->getIdx(), 8))
+         {
+              std::vector<int> atomRings;
+              for(size_t ring_idx = 0; ring_idx < ringInfo->atomRings().size(); ++ring_idx) {
+                  const auto& ring = ringInfo->atomRings()[ring_idx];
+                  if(std::find(ring.begin(), ring.end(), atom->getIdx()) != ring.end()) {
+                      atomRings.push_back(ring_idx);
+                  }
+              }
+
+              if (atomRings.size() >= 2) {
+                  bool isSpiro = true;
+                  for(size_t i = 0; i < atomRings.size(); ++i) {
+                      for(size_t j = i + 1; j < atomRings.size(); ++j) {
+                          const auto& ring1 = ringInfo->atomRings()[atomRings[i]];
+                          const auto& ring2 = ringInfo->atomRings()[atomRings[j]];
+                          int sharedAtoms = 0;
+                          for(int atom_idx1 : ring1) {
+                              for(int atom_idx2 : ring2) {
+                                  if (atom_idx1 == atom_idx2) sharedAtoms++;
+                              }
+                          }
+                          if (sharedAtoms > 1) {
+                              isSpiro = false;
+                              break;
+                          }
+                      }
+                      if (!isSpiro) break;
+                  }
+                  if(isSpiro) spiroCount++;
+              }
+         }
+     }
+    return static_cast<double>(spiroCount) / rdkMol->getNumAtoms();
+}
+
+std::variant<double, int, std::string> FcCNBondFraction::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        int z1 = bond->getBeginAtom()->getAtomicNum();
+        int z2 = bond->getEndAtom()->getAtomicNum();
+        return (z1 == 6 && z2 == 7) || (z1 == 7 && z2 == 6);
+    });
+}
+
+std::variant<double, int, std::string> FcCOBondFraction::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        int z1 = bond->getBeginAtom()->getAtomicNum();
+        int z2 = bond->getEndAtom()->getAtomicNum();
+        return (z1 == 6 && z2 == 8) || (z1 == 8 && z2 == 6);
+    });
+}
+
+std::variant<double, int, std::string> FcCSBondFraction::calculate(const Molecule& mol) const {
+    return calcBondFraction(mol, [](const RDKit::Bond* bond) {
+        int z1 = bond->getBeginAtom()->getAtomicNum();
+        int z2 = bond->getEndAtom()->getAtomicNum();
+        return (z1 == 6 && z2 == 16) || (z1 == 16 && z2 == 6);
+    });
 }
 
 }  // namespace descriptors
